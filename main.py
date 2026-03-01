@@ -1,6 +1,4 @@
 import sys
-from tkinter import filedialog
-
 from files import gather_bearings
 
 EXIT_SUCCESS=0
@@ -13,18 +11,20 @@ def main(argv: list[str]) -> int:
     :return: exit code
     """
 
-    (compiled_dir,
+    (compiled_objects,
      binary_file,
      symbol_file,
      split_dir) = gather_bearings()
-    print(f"Compiled objects located in: {compiled_dir}")
+    print(f"Compiled objects located in: {compiled_objects[0].parent}")
     print(f"Binary to split: {binary_file}")
     print(f"Symbol file: {symbol_file}")
     print(f"Directory to output split objects: {split_dir}")
 
-    # TODO: Create list tuple of Address (start, end) which match a binary
-    # TODO: Also keep a list of str which are symbols defined in these binaries and
-    #  which need to be found in the symbol list file to be exported by the split binary
+    # Locations of matching binaries within the main binary
+    address_matches = []
+    # Symbols imported by compiled binaries
+    #  (must be exported by a split binary)
+    undefined_symbols = []
 
     # TODO: For each valid .o file in user-compiled object directory,
     #   1. Get list of relocations (for masking during the search)
