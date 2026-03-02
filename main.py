@@ -27,9 +27,12 @@ def main(argv: list[str]) -> int:
     #  (must be exported by a split binary)
     undefined_symbols = []
 
-    binary_bytes = binary_file.read_bytes()
+    binary_bytes = bytearray(binary_file.read_bytes())
     for o_file in compiled_objects:
         o = ELF.from_path(o_file)
+        if o.data == b'\x00':
+            # Not a valid .o file
+            continue
         found = find_all_bytes(binary_bytes, o.data, o.mask)
         undefined_symbols += o.imported_symbols
         if not found:
@@ -38,6 +41,7 @@ def main(argv: list[str]) -> int:
         print(f"Found {len(found)} {'matches' if len(found) > 1 else 'match'} for {o_file}!")
         for start_addr in found:
             end_addr = start_addr + len(o.data) - 1
+            print(f"  -> {start_addr:#x} to {end_addr:#x}")
             address_matches.append((start_addr, end_addr))
 
     # Calculate interstitial space (bytes which were not user-compiled)
@@ -54,7 +58,23 @@ def main(argv: list[str]) -> int:
     if start_addr < len(binary_bytes):
         to_objectify.append((start_addr, len(binary_bytes)))
 
-    # TODO: Create object files from interstitial space, exporting symbols which are imported by user-compiled objects
+    # Create an object file for each interstice
+    for start_end in to_objectify:
+        o_file = split_dir / f'{start_end[0]}.o'
+        counter = 1
+        while o_file.exists():
+            o_file = split_dir / f'{start_end[0]}_{counter}.o'
+            counter += 1
+        symbols_in_range = [Symbol(sym.addr - start_end[0], sym.name)
+                     for sym in symbols if start_end[0] <= sym.addr <= start_end[1]]
+        o = ELF.from_bytes(binary_bytes[start_end[0]:start_end[1]], start_end[0],
+                           undefined_symbols, symbols_in_range, o_file)
+        o.write(o_file)
+
+    if undefined_symbols:
+        print("Not all symbols could be defined! Remaining:")
+        for sym in undefined_symbols:
+            print(f"\t{sym}")
 
     return EXIT_SUCCESS
 
