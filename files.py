@@ -3,6 +3,7 @@ try:
     HAS_TKINTER = True
     from tkinter import filedialog
 except ImportError:
+    filedialog = None
     HAS_TKINTER = False
 
 
