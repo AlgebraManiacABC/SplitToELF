@@ -23,6 +23,18 @@ def gather_bearings(argv: list[str]):
     :return:
     """
 
+    if not HAS_TKINTER and len(argv) < 5:
+        print(
+            f"""
+            Usage: python {Path(argv[0]).root} <compiled_dir> <3ds_binary> <symbol_file> <split_output_dir>
+            
+            === OR ===
+            (if tkinter installed)
+            
+            Usage: python {Path(argv[0]).root}
+            """
+        )
+
     if HAS_TKINTER:
         compiled_dir = filedialog.askdirectory(
             initialdir='.',
@@ -39,7 +51,7 @@ def gather_bearings(argv: list[str]):
 
     if HAS_TKINTER:
         binary_file = filedialog.askopenfilename(
-            filetypes=[("3DS Executable Binary", "*.cro code.bin"), ("All files", "*")],
+            filetypes=[("3DS Executable Binary", ".cro code.bin .code"), ("All files", "*")],
             title="Binary to Split"
         )
     else:
@@ -49,7 +61,7 @@ def gather_bearings(argv: list[str]):
 
     if HAS_TKINTER:
         symbol_file = filedialog.askopenfilename(
-            filetypes=[("All files", "*")],
+            filetypes=[("CSV Files",".csv"), ("All files", "*")],
             title="Symbol file"
         )
     else:

@@ -187,7 +187,7 @@ class ELF:
             sh_rel_name = get_name(shstrs, sh_rel.name_off)
             if sh_rel_name == '.rel.text':
                 reader.seek(sh_rel.off)
-                num_relocs = int(sh_rel.size / sh_rel.ENTSIZE)
+                num_relocs = int(sh_rel.size / sh_rel.entsize)
                 for j in range(num_relocs):
                     rel_entry = RelocationEntry.from_reader(reader)
                     sym = symtab_entries[rel_entry.symbol_index]
