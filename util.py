@@ -4,6 +4,13 @@ from io import BytesIO
 from pathlib import Path
 
 
+class CTRSectionType(IntEnum):
+    TEXT = 0
+    RODATA = 1
+    DATA = 2
+    BSS = 3
+
+
 class Symbol:
     def __init__(self, addr: int, name: str):
         self.addr = addr
@@ -118,6 +125,39 @@ class Bitmask:
                 self.mask[rel_entry.off: rel_entry.off + 3] = b'\x00' * 3
             case _:
                 print(f"Found {rel_entry.type.name}, but this is unimplemented!")
+
+
+class CTRSectionInfo:
+    def __init__(self, addr: int, size: int, type: CTRSectionType):
+        self.addr = addr
+        self.size = size
+        self.type = type
+        pass
+
+    @classmethod
+    def from_reader(cls, reader: BinaryReader, type: CTRSectionType) -> "CTRSectionInfo":
+        addr = reader.read_u32()
+        reader.read_u32()
+        size = reader.read_u32()
+        reader.read_u32()
+        return cls(addr,size, type)
+
+
+class ExHeader:
+    def __init__(self, text, rodata, data, bss):
+        self.text = text
+        self.rodata = rodata
+        self.data = data
+        self.bss = bss
+
+    @classmethod
+    def from_reader(cls, reader: BinaryReader) -> "ExHeader":
+        reader.seek(0x10)
+        text = CTRSectionInfo.from_reader(reader, CTRSectionType.TEXT)
+        rodata = CTRSectionInfo.from_reader(reader, CTRSectionType.RODATA)
+        data = CTRSectionInfo.from_reader(reader, CTRSectionType.DATA)
+        bss = CTRSectionInfo(data.addr + data.size, reader.read_u32())
+        return cls(text, rodata, data, bss)
 
 
 def get_name(data: bytes, off: int) -> str:
