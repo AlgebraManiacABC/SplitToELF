@@ -1,5 +1,9 @@
 from pathlib import Path
-from tkinter import filedialog
+try:
+    HAS_TKINTER = True
+    from tkinter import filedialog
+except ImportError:
+    HAS_TKINTER = False
 
 
 def gather_compiled_object_files(dirname: str) -> list[Path]:
@@ -14,40 +18,52 @@ def gather_compiled_object_files(dirname: str) -> list[Path]:
     return objects
 
 
-def gather_bearings():
+def gather_bearings(argv: list[str]):
     """
     :return:
     """
 
-    compiled_dir = filedialog.askdirectory(
-        initialdir='.',
-        mustexist=True,
-        title="User-compiled objects directory"
-    )
+    if HAS_TKINTER:
+        compiled_dir = filedialog.askdirectory(
+            initialdir='.',
+            mustexist=True,
+            title="User-compiled objects directory"
+        )
+    else:
+        compiled_dir = argv[1]
     if not compiled_dir:
         raise Exception("Did not pick a user-compiled object directory!")
     compiled_objects = gather_compiled_object_files(compiled_dir)
     if len(compiled_objects) == 0:
         raise Exception(f"No object files found in {compiled_dir}!")
 
-    binary_file = filedialog.askopenfilename(
-        filetypes=[("3DS Executable Binary", "*.cro code.bin"), ("All files", "*")],
-        title="Binary to Split"
-    )
+    if HAS_TKINTER:
+        binary_file = filedialog.askopenfilename(
+            filetypes=[("3DS Executable Binary", "*.cro code.bin"), ("All files", "*")],
+            title="Binary to Split"
+        )
+    else:
+        binary_file = argv[2]
     if not binary_file:
         raise Exception("Did not pick the binary to split!")
 
-    symbol_file = filedialog.askopenfilename(
-        filetypes=[("All files", "*")],
-        title="Symbol file"
-    )
+    if HAS_TKINTER:
+        symbol_file = filedialog.askopenfilename(
+            filetypes=[("All files", "*")],
+            title="Symbol file"
+        )
+    else:
+        symbol_file = argv[3]
     if not symbol_file:
         raise Exception("Did not pick the symbol file!")
 
-    split_dir = filedialog.askdirectory(
-        mustexist=False,
-        title="Split object output directory"
-    )
+    if HAS_TKINTER:
+        split_dir = filedialog.askdirectory(
+            mustexist=False,
+            title="Split object output directory"
+        )
+    else:
+        split_dir = argv[4]
     if not split_dir:
         raise Exception("Did not pick the output directory!")
 
