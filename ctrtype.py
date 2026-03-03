@@ -488,7 +488,8 @@ class CRO:
 
 
 class CTRBinary:
-    def __init__(self, binary: bytes | CRO):
+    def __init__(self, name: str, binary: bytes | CRO):
+        self.name = name
         self.binary = binary
         # Ensure real bytes are kept
         if isinstance(binary, CRO):
@@ -503,7 +504,7 @@ class CTRBinary:
         if '.cro' in path.name:
             reader = BinaryReader.from_path(path)
             cro = CRO.from_reader(reader)
-            return cls(cro)
+            return cls(path.name, cro)
         else:
             code = path.read_bytes()
-            return cls(code)
+            return cls(path.name, code)

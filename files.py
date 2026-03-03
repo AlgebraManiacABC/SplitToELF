@@ -105,4 +105,4 @@ def gather_bearings(argv: list[str]):
     if not split_dir:
         raise Exception("Did not pick the output directory!")
 
-    return compiled_objects, Path(binary_file), symbols, Path(split_dir)
+    return compiled_objects, ctr_binary, symbols, Path(split_dir)

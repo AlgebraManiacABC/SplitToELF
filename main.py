@@ -13,11 +13,11 @@ def main(argv: list[str]) -> int:
     """
 
     (compiled_objects,
-     binary_file,
+     ctr_binary,
      symbols,
      split_dir) = gather_bearings(argv)
     print(f"Compiled objects located in: {compiled_objects[0].parent}")
-    print(f"Binary to split: {binary_file}")
+    print(f"Binary to split: {ctr_binary.name}")
     print(f"Symbol count from symbol file: {len(symbols)}")
     print(f"Directory to output split objects: {split_dir}")
 
@@ -27,7 +27,7 @@ def main(argv: list[str]) -> int:
     #  (must be exported by a split binary)
     undefined_symbols = []
 
-    binary_bytes = bytearray(binary_file.read_bytes())
+    binary_bytes = ctr_binary.binary
     for o_file in compiled_objects:
         o = ELF.from_path(o_file)
         if o.data == b'\x00':
@@ -36,7 +36,7 @@ def main(argv: list[str]) -> int:
         found = find_all_bytes(binary_bytes, o.data, o.mask)
         undefined_symbols += o.imported_symbols
         if not found:
-            raise Exception(f"Binary file {o_file} was not found in {binary_file}!")
+            raise Exception(f"Binary file {o_file} was not found in {ctr_binary.name}!")
 
         print(f"Found {len(found)} {'matches' if len(found) > 1 else 'match'} for {o_file}!")
         for start_addr in found:
