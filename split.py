@@ -54,10 +54,11 @@ def split(binary: CTRBinary, compiled_objects: list[Path], build_dir: Path, symb
     # Create an object file for each interstice
     split_objects = []
     for start_end in to_objectify:
-        o_file = build_dir / f'{start_end[0]:08x}.o'
+        base_name = f'{start_end[0] + binary.base_addr:08x}'
+        o_file = build_dir / f'{base_name}.o'
         counter = 1
         while o_file.exists():
-            o_file = build_dir / f'{start_end[0]:08x}_{counter}.o'
+            o_file = build_dir / f'{base_name}_{counter}.o'
             counter += 1
         symbols_in_range = [Symbol(sym.addr - start_end[0], sym.name)
                      for sym in symbols if start_end[0] <= sym.addr <= start_end[1]]

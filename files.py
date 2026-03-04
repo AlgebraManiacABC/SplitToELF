@@ -16,10 +16,10 @@ except ImportError:
 def gather_binaries(path: Path) -> dict[str, CTRBinary]:
     binaries = dict()
     for f in path.rglob('*'):
-        if '.cro' in f:
+        if '.cro' in f.name:
             cro = CRO.from_reader(BinaryReader.from_path(f))
             binaries[f.name] = CTRBinary(f.name, cro)
-        if 'code' in f:
+        if 'code' in f.name:
             binaries[f.name] = CTRBinary(f.name, f.read_bytes())
     return binaries
 
@@ -94,7 +94,7 @@ class CTRPipelineInfo:
         for f in sym_dir.iterdir():
             sym_list = gather_symbols(f)
             for sym in sym_list:
-                sym -= binaries[f.stem].base_addr
+                sym.addr -= binaries[f.stem].base_addr
             symbols[f.stem] = sym_list
         cc_info = yaml.safe_load(cc_info_path.read_text())
         return cls(working_dir, binaries, compiled_objects, build_dir, out_dir, tool_dir, symbols, cc_info)
@@ -127,4 +127,4 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
     if not working_dir:
         raise Exception("Did not pick a working directory!")
 
-    return CTRPipelineInfo(Path(working_dir))
+    return CTRPipelineInfo.from_path(Path(working_dir))
