@@ -66,6 +66,7 @@ def split(binary: CTRBinary, compiled_objects: list[Path], build_dir: Path, symb
                      for sym in symbols if start_end[0] <= sym.addr <= start_end[1]]
         o = ELF.from_bytes(binary_bytes[start_end[0]:start_end[1]+1], start_end[0],
                            undefined_symbols, symbols_in_range)
+        o_file.parent.mkdir(parents=True, exist_ok=True)
         o.write(o_file)
         objects.append((start_end[0],o_file))
 
