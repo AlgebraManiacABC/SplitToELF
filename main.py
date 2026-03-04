@@ -66,7 +66,8 @@ def main(argv: list[str]) -> int:
                 "target_path": str(t_path.relative_to(info.working_dir)),
                 "base_path": str(base_path.relative_to(info.working_dir)) if base_path else None,
                 "metadata": {
-                    "progress_categories": [name]
+                    "progress_categories": [name],
+                    "complete": False if base_path is None else None
                 }
             })
 
