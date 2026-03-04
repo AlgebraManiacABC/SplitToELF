@@ -285,6 +285,10 @@ class ELF:
             writer.write_str('.strtab')
         shstrtab_name_off = writer.tell() - shstrtab_off
         writer.write_str('.shstrtab')
+        # Pad to 4-byte boundary (necessary for some parsers
+        #  and technically required by ELF spec)
+        while writer.tell() % 4 != 0:
+            writer.write_u8(0)
         # Section header entries
         sh_off = writer.tell()
         SectionHeaderEntry(0, 0, 0, 0, 0,
