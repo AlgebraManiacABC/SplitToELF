@@ -52,7 +52,7 @@ def main(argv: list[str]) -> int:
         splat, compiled = split(info.binaries[name], compiled, info.build_dir / name, info.symbols.get(name,[]))
 
         # Generate objdiff json units
-        compiled_dict = {addr: path for addr, path in compiled}
+        compiled_dict: dict [int, Path] = {addr: path for addr, path in compiled}
         target_dict: dict[int, Path] = {addr: path for addr, path in splat}
         to_link = []
         for t_addr, t_path in target_dict.items():
@@ -64,7 +64,7 @@ def main(argv: list[str]) -> int:
             objdiff_units.append({
                 "name": f'{name}/{t_path.stem}',
                 "target_path": str(t_path.relative_to(info.working_dir)),
-                "base_path": str(base_path) if base_path else None,
+                "base_path": str(base_path.relative_to(info.working_dir)) if base_path else None,
                 "metadata": {
                     "progress_categories": [name]
                 }
