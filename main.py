@@ -1,6 +1,8 @@
 import hashlib
 import sys
 import subprocess
+import json
+from pathlib import Path
 
 from ctrtype import CRO
 from files import gather_bearings
@@ -28,7 +30,7 @@ def main(argv: list[str]) -> int:
     print(f"Build directory: {info.build_dir}")
     print(f"Final output directory: {info.out_dir}")
 
-    # TODO: Compile
+    objdiff_units = []
 
     for name in info.binaries.keys():
         # Compile
@@ -47,14 +49,32 @@ def main(argv: list[str]) -> int:
             compiled.append(bld)
 
         # Split
-        objects = split(info.binaries[name], compiled, info.build_dir / name, info.symbols.get(name,[]))
-        objects.sort(key=lambda b: b[0])
+        splat, compiled = split(info.binaries[name], compiled, info.build_dir / name, info.symbols.get(name,[]))
+
+        # Generate objdiff json units
+        compiled_dict = {addr: path for addr, path in compiled}
+        target_dict: dict[int, Path] = {addr: path for addr, path in splat}
+        to_link = []
+        for t_addr, t_path in target_dict.items():
+            base_path = compiled_dict.get(t_addr, None)
+            if base_path:
+                to_link.append(base_path)
+            else:
+                to_link.append(t_path)
+            objdiff_units.append({
+                "name": f'{name}/{t_path.stem}',
+                "target_path": str(t_path.relative_to(info.working_dir)),
+                "base_path": str(base_path) if base_path else None,
+                "metadata": {
+                    "progress_categories": [name]
+                }
+            })
 
         # Link
         linked = info.out_dir / f'{name}_linked'
         linked.parent.mkdir(parents=True, exist_ok=True)
         result = subprocess.run([str(info.tool_dir / 'ld'), '--entry=0', '--no-warn-mismatch',
-                                 *[str(o) for _, o in objects], '-o', linked],
+                                 *[str(o) for o in to_link], '-o', linked],
                                 capture_output=True, text=True)
         if result.returncode != EXIT_SUCCESS:
             raise Exception(f"Linker error!\nstdout: {result.stdout}\nstderr: {result.stderr}")
@@ -86,7 +106,17 @@ def main(argv: list[str]) -> int:
         if de_novo != existing:
             raise Exception(f"Binary {name} was created, but does not match original!")
 
-        print(f"ROUND ROBIN DECOMP COMPLETE FOR {name.upper()}!!")
+        print(f"ROUND TRIP DECOMP COMPLETE FOR {name.upper()}!!")
+
+    objdiff = {
+        "$schema": "https://raw.githubusercontent.com/encounter/objdiff/main/config.schema.json",
+        "build_target": False,
+        "build_base": False,
+        "units": objdiff_units,
+        "progress_categories": [{"id": n, "name": n} for n in info.binaries.keys()]
+    }
+    objdiff_path = info.working_dir / 'objdiff.json'
+    objdiff_path.write_text(json.dumps(objdiff, indent=2))
 
     return EXIT_SUCCESS
 
