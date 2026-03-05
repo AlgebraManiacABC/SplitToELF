@@ -16,9 +16,6 @@ def split(binary: CTRBinary, compiled_objects: list[Path], build_dir: Path, symb
     """
     # Locations of matching binaries within the main binary
     address_matches = []
-    # Symbols imported by compiled binaries
-    #  (must be exported by a split binary)
-    undefined_symbols = []
 
     binary_bytes = binary.data
     compiled = []
@@ -28,7 +25,6 @@ def split(binary: CTRBinary, compiled_objects: list[Path], build_dir: Path, symb
             # Not a valid .o file
             continue
         found = find_all_bytes(binary_bytes, o.data, o.mask)
-        undefined_symbols += o.imported_symbols
         if not found:
             raise Exception(f"Binary file {o_file} was not found in {binary.name}!")
 
@@ -59,17 +55,12 @@ def split(binary: CTRBinary, compiled_objects: list[Path], build_dir: Path, symb
         base_name = f'{start_end[0] + binary.base_addr:08x}'
         o_file = build_dir / f'{base_name}.o'
         symbols_in_range = [Symbol(sym.addr - start_end[0], sym.name, sym.mode, sym.size)
-                     for sym in symbols if start_end[0] <= sym.addr <= start_end[1]]
+                     for sym in symbols if start_end[0] <= sym.addr < start_end[1]]
         o = ELF.from_bytes(binary_bytes[start_end[0]:start_end[1]+1], start_end[0],
-                           undefined_symbols, symbols_in_range)
+                           symbols_in_range)
         o_file.parent.mkdir(parents=True, exist_ok=True)
         o.write(o_file)
         splat.append((start_end[0],o_file))
-
-    if undefined_symbols:
-        print("Not all symbols could be defined! Remaining:")
-        for sym in undefined_symbols:
-            print(f"\t{sym}")
 
     splat.sort(key=lambda s: s[0])
     compiled.sort(key=lambda c: c[0])

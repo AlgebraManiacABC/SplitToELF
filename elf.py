@@ -242,36 +242,23 @@ class ELF:
         return cls.from_reader(BinaryReader.from_path(path))
 
     @classmethod
-    def from_bytes(cls, b: bytes, data_off: int, to_export: list[str], sym_list: list[Symbol]) -> "ELF":
+    def from_bytes(cls, b: bytes, data_off: int, sym_list: list[Symbol]) -> "ELF":
         header = ELFHeader(0, 0, 0, True)
         mask = Bitmask(len(b))
         local_strtab = bytearray(b'\x00')
         global_strtab = bytearray()
         local_syms = []
         global_syms: list[SymbolTableEntry] = []
-        for sym in to_export.copy():
-            # match with sym_list
-            addr = -1
-            mode = None
-            size = 0
-            for s in sym_list:
-                if sym == s.name:
-                    addr = s.addr
-                    mode = s.mode
-                    size = s.size
-                    break
-            if addr < 0:
-                continue
-            if addr < data_off or addr >= data_off + len(b):
+        for sym in sym_list:
+            if sym.addr < data_off or sym.addr >= data_off + len(b):
                 continue
             # NOTE: st_other == 0x2 ("hidden"); decomp.me creates hidden exports by default
             local_syms.append(SymbolTableEntry(len(local_strtab),
-                addr - data_off, 0, 0x0, 0x0, 1))
-            local_strtab += mode.encode('utf-8') + b'\x00'
+                sym.addr - data_off, 0, 0x0, 0x0, 1))
+            local_strtab += sym.mode.encode('utf-8') + b'\x00'
             global_syms.append(SymbolTableEntry(len(global_strtab),
-                addr - data_off, size, 0x12, 0x2, 1))
-            global_strtab += sym.encode('utf-8') + b'\x00'
-            to_export.remove(sym)
+                sym.addr - data_off, sym.size, 0x12, 0x2, 1))
+            global_strtab += sym.name.encode('utf-8') + b'\x00'
         for g_sym in global_syms:
             g_sym.name_off += len(local_strtab)
         strtab_bytes = local_strtab + global_strtab
