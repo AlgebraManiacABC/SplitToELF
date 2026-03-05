@@ -252,7 +252,6 @@ class ELF:
         for sym in sym_list:
             if sym.addr < data_off or sym.addr >= data_off + len(b):
                 continue
-            # NOTE: st_other == 0x2 ("hidden"); decomp.me creates hidden exports by default
             local_syms.append(SymbolTableEntry(len(local_strtab),
                 sym.addr - data_off, 0, 0x0, 0x0, 1))
             local_strtab += sym.mode.encode('utf-8') + b'\x00'

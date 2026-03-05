@@ -102,7 +102,7 @@ class CTRPipelineInfo:
         if not cc_info_path.exists():
             missing.append('compiler configuration "cc.yaml"')
         if missing:
-            e = f"Pipeline incomplete for working dir {working_dir}!"
+            e = f"Pipeline incomplete for working dir {working_dir} (current dir {Path.cwd()})!"
             e += "".join(f"\nMissing {m}!" for m in missing)
             raise Exception(e)
         binaries = gather_binaries(orig_dir)

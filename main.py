@@ -36,14 +36,18 @@ def main(argv: list[str]) -> int:
         # Compile
         to_compile = info.sources.get(name,[])
         compiled = []
+        default = info.cc_info.get('default', None)
         for c in to_compile:
             bld = info.build_dir / name / (c.stem + '.o')
             bld.parent.mkdir(parents=True, exist_ok=True)
-            d = info.cc_info[name][c.name]
+            d = info.cc_info[name].get(c.name, None)
+            if not d:
+                d = default
             cc = d['cc']
             flags = d['flags']
-            result = subprocess.run([str(info.tool_dir / cc), *flags, c, '-c', '-o', bld],
-                                    capture_output=True, text=True)
+            cmd = [str(info.tool_dir / cc), *flags, str(c), '-c', '-o', str(bld)]
+            print(" ".join(cmd))
+            result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != EXIT_SUCCESS:
                 raise Exception(f"Compiler error!\nstdout: {result.stdout}\nstderr: {result.stderr}")
             compiled.append(bld)
@@ -74,9 +78,10 @@ def main(argv: list[str]) -> int:
         # Link
         linked = info.out_dir / f'{name}_linked'
         linked.parent.mkdir(parents=True, exist_ok=True)
-        result = subprocess.run([str(info.tool_dir / 'ld'), '--entry=0', '--no-warn-mismatch',
-                                 *[str(o) for o in to_link], '-o', linked],
-                                capture_output=True, text=True)
+        cmd = [str((info.tool_dir / 'ld').resolve()), '--entry=0', '--no-warn-mismatch',
+                                 *[str(o) for o in to_link], '-o', str(linked)]
+        print(" ".join(cmd))
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != EXIT_SUCCESS:
             raise Exception(f"Linker error!\nstdout: {result.stdout}\nstderr: {result.stderr}")
 
@@ -84,8 +89,8 @@ def main(argv: list[str]) -> int:
         final_binary = info.out_dir / name
         if '.cro' in name:
             final_binary = info.out_dir / f'{name}.temp'
-        result = subprocess.run([str(info.tool_dir / 'objcopy'), str(linked), '-O', 'binary', str(final_binary)],
-                                capture_output=True, text=True)
+        cmd = [str((info.tool_dir / 'objcopy').resolve()), str(linked), '-O', 'binary', str(final_binary)]
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != EXIT_SUCCESS:
             raise Exception(f"Objcopy error!\nstdout: {result.stdout}\nstderr: {result.stderr}")
         linked.unlink()
