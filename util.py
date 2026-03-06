@@ -189,5 +189,10 @@ def find_all_bytes(data: bytes, pattern: bytes, mask: Bitmask):
     return found
 
 
+def pad_to_4(writer: BinaryWriter):
+    while writer.tell() % 4 != 0:
+        writer.write_u8(0)
+
+
 def sanitize(name: str) -> str:
     return re.sub(r'[<>:"/\\|?*]', '_', name)

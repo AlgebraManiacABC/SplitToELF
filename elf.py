@@ -283,6 +283,7 @@ class ELF:
         # .text
         text_off = writer.tell()
         writer.write_bytes(self.data)
+        pad_to_4(writer)
         # .symtab
         symtab_off = writer.tell()
         writer.write_bytes(b'\x00' * 0x10) # 0th entry is null
@@ -306,10 +307,7 @@ class ELF:
             writer.write_str('.strtab')
         shstrtab_name_off = writer.tell() - shstrtab_off
         writer.write_str('.shstrtab')
-        # Pad to 4-byte boundary (necessary for some parsers
-        #  and technically required by ELF spec)
-        while writer.tell() % 4 != 0:
-            writer.write_u8(0)
+        pad_to_4(writer)
         # Section header entries
         sh_off = writer.tell()
         SectionHeaderEntry(0, 0, 0, 0, 0,
