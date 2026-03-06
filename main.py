@@ -54,6 +54,10 @@ def main(argv: list[str]) -> int:
             subp_run(cmd, False, f"Objcopy error on {c}!")
             compiled.append(bld)
 
+        if info.compile_only:
+            print(f"COMPILATION OF {name.upper()} COMPLETE!")
+            continue
+
         # Split
         print(f"Splitting {name}")
         (info.split_dir / name).mkdir(parents=True, exist_ok=True)
@@ -82,15 +86,16 @@ def main(argv: list[str]) -> int:
         else:
             print(f"OBJECT CREATION COMPLETE FOR {name.upper()}!!")
 
-    objdiff = {
-        "$schema": "https://raw.githubusercontent.com/encounter/objdiff/main/config.schema.json",
-        "build_target": False,
-        "build_base": False,
-        "units": objdiff_units,
-        "progress_categories": [{"id": n, "name": n} for n in info.binaries.keys()]
-    }
-    objdiff_path = info.working_dir / 'objdiff.json'
-    objdiff_path.write_text(json.dumps(objdiff, indent=2))
+    if not info.compile_only:
+        objdiff = {
+            "$schema": "https://raw.githubusercontent.com/encounter/objdiff/main/config.schema.json",
+            "build_target": False,
+            "build_base": False,
+            "units": objdiff_units,
+            "progress_categories": [{"id": n, "name": n} for n in info.binaries.keys()]
+        }
+        objdiff_path = info.working_dir / 'objdiff.json'
+        objdiff_path.write_text(json.dumps(objdiff, indent=2))
 
     return EXIT_SUCCESS
 

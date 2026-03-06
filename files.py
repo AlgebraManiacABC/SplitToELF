@@ -69,7 +69,8 @@ class CTRPipelineInfo:
                  out_dir: Path, tool_dir: Path,
                  symbols: dict[str, list[Symbol]],
                  cc_info: dict[str, dict[str, dict]],
-                 recreating_binaries: bool):
+                 recreating_binaries: bool,
+                 compile_only: bool):
         self.working_dir = working_dir
         self.originals = originals
         self.binaries = binaries
@@ -81,9 +82,10 @@ class CTRPipelineInfo:
         self.symbols = symbols
         self.cc_info = cc_info
         self.recreating_binaries = recreating_binaries
+        self.compile_only = compile_only
 
     @classmethod
-    def from_path(cls, working_dir: Path, recreating_binaries: bool) -> "CTRPipelineInfo":
+    def from_path(cls, working_dir: Path, recreating_binaries: bool, compile_only: bool) -> "CTRPipelineInfo":
         orig_dir = working_dir / 'orig'
         originals = list(orig_dir.rglob('*'))
         source_dir = working_dir / 'src'
@@ -123,7 +125,7 @@ class CTRPipelineInfo:
             symbols[f.stem] = sym_list
         cc_info = yaml.safe_load(cc_info_path.read_text())
         return cls(working_dir, originals, binaries, sources, build_dir, split_dir,
-                   out_dir, tool_dir, symbols, cc_info, recreating_binaries)
+                   out_dir, tool_dir, symbols, cc_info, recreating_binaries, compile_only)
 
 
 def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
@@ -157,9 +159,20 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
     else:
         working_dir = argv[1]
         recreating_binaries = False
-        if len(argv) > 2:
-            recreating_binaries = argv[2] == '--recreateBinaries=True'
+        compile_only = False
+        if len(argv) == 3:
+            test_rb = argv[2].startswith('--recreateBinaries')
+            test_co = argv[2].startswith('--compileOnly')
+            if test_rb:
+                recreating_binaries = argv[2] == '--recreateBinaries=True'
+            if test_co:
+                compile_only = argv[2] == '--compileOnly=True'
+        elif len(argv) == 4:
+            test_rb = argv[2] if argv[2].startswith('--recreatingBinaries') else argv[3]
+            test_co = argv[2] if argv[2].startswith('compileOnly') else argv[3]
+            recreating_binaries = test_rb == '--recreateBinaries=True'
+            compile_only = test_co == '--compileOnly=True'
     if not working_dir:
         raise Exception("Did not pick a working directory!")
 
-    return CTRPipelineInfo.from_path(Path(working_dir), recreating_binaries)
+    return CTRPipelineInfo.from_path(Path(working_dir), recreating_binaries, compile_only)
