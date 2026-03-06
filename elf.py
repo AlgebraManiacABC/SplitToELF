@@ -272,7 +272,7 @@ class ELF:
                 0, 0, 0x0, 0x0, 1)]
         local_strtab += symbol.mode.encode('utf-8') + b'\x00'
         global_syms: list[SymbolTableEntry] = [SymbolTableEntry(len(global_strtab) + len(local_strtab),
-                0, symbol.size, 0x12, 0, 1)]
+                0, len(b), 0x12, 0, 1)]
         global_strtab += symbol.name.encode('utf-8') + b'\x00'
         strtab_bytes = local_strtab + global_strtab
         return cls(header, b, symbol.addr, Bitmask(len(b)), [], strtab_bytes, local_syms, global_syms)
