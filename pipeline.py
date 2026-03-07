@@ -24,7 +24,7 @@ def compile_sources(name: str, info, objcopy):
                        progress_reports: bool) -> tuple[bool, Path]:
         nonlocal completed_count
         cmd = [cc, *flags, str(c_path), '-c', '-o', str(o_path)]
-        print(" ".join(cmd))
+        # print(" ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != EXIT_SUCCESS:
             if ignore_compiler_errors:
