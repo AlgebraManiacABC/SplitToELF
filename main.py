@@ -1,11 +1,10 @@
 import hashlib
-import subprocess
 import sys
 import json
 from files import gather_bearings
-from pipeline import link_by_seriatum, generate_objdiff_unit, recreate_binary
+from pipeline import link_by_seriatum, generate_objdiff_unit, recreate_binary, compile_sources
 from split import split_by_symbols
-from util import subp_run, EXIT_SUCCESS, EXIT_FAILURE
+from util import EXIT_SUCCESS, EXIT_FAILURE
 
 
 def main(argv: list[str]) -> int:
@@ -33,56 +32,19 @@ def main(argv: list[str]) -> int:
     objdiff_units = []
 
     for name in info.binaries.keys():
-        # Compile
-        to_compile = info.sources.get(name,[])
-        compiled = []
-        default = info.cc_info.get('default', None)
-        ignore_list = info.cc_info.get(name,{}).get('ignored', [])
-        errored = []
-        num_to_compile = len(to_compile)
-        for i, c in enumerate(to_compile):
-            if info.args['progress_reports'] and i % int(num_to_compile / 100) == 0:
-                print(f"[COMPILER PROGRESS] {i/num_to_compile:.1f}%")
-            if c.name in ignore_list:
-                continue
-            bld = info.build_dir / name / (c.stem + '.o')
-            bld.parent.mkdir(parents=True, exist_ok=True)
-            d = info.cc_info[name].get(c.name, None)
-            if not d:
-                d = default
-            cc = d['cc']
-            flags = d['flags']
-            cmd = [str(info.tool_dir / cc), *flags, str(c), '-c', '-o', str(bld)]
-            print(" ".join(cmd))
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != EXIT_SUCCESS:
-                if info.args['ignore_compiler_errors']:
-                    print(f"Error compiling {c}! Skipping!")
-                    errored.append(c)
-                    continue
-                else:
-                    raise Exception(f"Compiler error!\nstdout:\n{result.stdout}\n\nstderr:\n{result.stderr}")
-            # Since armcc doesn't globalize the symbol (and we might need it for linking), globalize with objcopy
-            cmd = [objcopy, f'--globalize-symbol={c.name}', str(bld)]
-            subp_run(cmd, False, f"Objcopy error on {c}!")
-            compiled.append(bld)
-        if info.args['progress_reports']:
-            print("[COMPILER PROGRESS] 100%")
+        if not info.args['compile_only']:
+            print(f"Splitting {name}!")
+            (info.split_dir / name).mkdir(parents=True, exist_ok=True)
+            targets = split_by_symbols(info.binaries[name], info.split_dir / name, info.symbols.get(name, []), info)
 
-        if errored:
-            print(f"Error compiling {len(errored)} functions!! First 10:")
-            for e in errored[0:10]:
-                print(e)
+        print(f"Compiling {name}!")
+        (info.build_dir / name).mkdir(parents=True, exist_ok=True)
+        compiled = compile_sources(name, info, objcopy)
 
         if info.args['compile_only']:
             if info.args['progress_reports']:
                 print(f"COMPILATION OF {name.upper()} COMPLETE!")
             continue
-
-        # Split
-        print(f"Splitting {name}")
-        (info.split_dir / name).mkdir(parents=True, exist_ok=True)
-        targets = split_by_symbols(info.binaries[name], info.split_dir / name, info.symbols.get(name, []))
 
         # Generate objdiff json units
         units, to_link = generate_objdiff_unit(name, info.working_dir, compiled, targets)

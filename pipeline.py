@@ -1,7 +1,81 @@
+import math
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-
+import subprocess
 from ctrtype import CRO, CTRBinary
-from util import subp_run, BinaryWriter
+from util import subp_run, BinaryWriter, EXIT_SUCCESS
+
+
+def compile_sources(name: str, info, objcopy):
+    # Compile
+    to_compile = info.sources.get(name, [])
+    compiled = []
+    default = info.cc_info.get('default', None)
+    ignore_list = info.cc_info.get(name, {}).get('ignored', [])
+    errored = []
+    num_to_compile = len(to_compile)
+    compile_futures = []
+    completed_count = 0
+    lock = threading.Lock()
+
+    def compile_source(c_path: Path, o_path: Path, cc: str,
+                       flags: list[str], objcopy: str, ignore_compiler_errors: bool,
+                       progress_reports: bool) -> tuple[bool, Path]:
+        nonlocal completed_count
+        cmd = [cc, *flags, str(c_path), '-c', '-o', str(o_path)]
+        print(" ".join(cmd))
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != EXIT_SUCCESS:
+            if ignore_compiler_errors:
+                print(f"Error compiling {c_path}! Skipping!")
+                ret = False, c_path
+            else:
+                raise Exception(f"Compiler error!\nstdout:\n{result.stdout}\n\nstderr:\n{result.stderr}")
+        else:
+            ret = True, o_path
+        with lock:
+            completed_count += 1
+            if progress_reports and (completed_count % math.ceil(num_to_compile / 100)) == 0:
+                print(f"[COMPILER PROGRESS] {completed_count / num_to_compile:.1f}%")
+        return ret
+
+    with ThreadPoolExecutor() as executor:
+        (info.build_dir / name).mkdir(parents=True, exist_ok=True)
+        for c in to_compile:
+            if c.name in ignore_list:
+                continue
+            bld = info.build_dir / name / (c.stem + '.o')
+            d = info.cc_info[name].get(c.name, None)
+            if not d:
+                d = default
+            cc = info.tool_dir / d['cc']
+            flags = d['flags']
+            compile_futures.append(
+                executor.submit(compile_source, c, bld, str(cc), flags, objcopy,
+                                info.args['ignore_compiler_errors'],
+                                info.args['progress_reports'])
+            )
+
+    for f in compile_futures:
+        ok, path = f.result()
+        if ok:
+            # Since armcc doesn't globalize the symbol (and we might need it for linking), globalize with objcopy
+            cmd = [objcopy, f'--globalize-symbol={path.stem}', str(path)]
+            subp_run(cmd, False, f"Objcopy error on {path}!")
+            compiled.append(path)
+        else:
+            errored.append(path)
+
+    if info.args['progress_reports']:
+        print("[COMPILER PROGRESS] 100%")
+
+    if errored:
+        print(f"Error compiling {len(errored)} functions!! First 10:")
+        for e in errored[0:10]:
+            print(e)
+
+    return compiled
 
 
 def generate_objdiff_unit(name: str, working_dir: Path, compiled: list[Path], targets: list[tuple[int, Path]]) -> tuple[list, list[Path]]:

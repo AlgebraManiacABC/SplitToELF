@@ -7,7 +7,7 @@ from ctrtype import CTRBinary
 from util import find_all_bytes, Symbol, sanitize
 
 
-def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol]):
+def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol], info):
     """
     Creates object files for all symbols in the list,
      using the provided binary.
@@ -18,26 +18,29 @@ def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol]):
     """
 
     bin_data = binary.data
+    bin_size = len(bin_data)
+    print(f'Total binary size: {bin_size} (0x{bin_size:x})')
     symbol_dict = {sym.addr: sym for sym in symbols}
-    addrs = [sym.addr for sym in symbols]
-    addrs.sort(reverse=True)
+    addrs = sorted([sym.addr for sym in symbols])
     addrs_to_log = set(addrs[i] for i in range(0, len(addrs), 100))
     splat = []
+    all_o = []
     cur_addr = 0
     while cur_addr < len(bin_data):
-        if cur_addr in addrs_to_log:
+        if info.args['progress_reports'] and cur_addr in addrs_to_log:
             print(f"[SPLIT PROGRESS] {100 * cur_addr / len(bin_data):.2f}%")
-        next_addr = addrs[-1] if addrs else len(bin_data)
+        next_addr = addrs[0] if addrs else len(bin_data)
         while cur_addr > next_addr:
             # print(f"Symbol at {next_addr} was overlapped by a preceding symbol! Ignoring")
-            addrs.pop()
-            next_addr = addrs[-1] if addrs else len(bin_data)
+            addrs.pop(0)
+            next_addr = addrs[0] if addrs else len(bin_data)
         if cur_addr == next_addr:
-            addrs.pop()
+            addrs.pop(0)
             sym = symbol_dict[cur_addr]
-            sym.name = sym.name.replace('::', '__')
+            sym_name = sym.name.replace('::', '__')
             symbol_bytes = bin_data[sym.addr:sym.addr + sym.size]
             cur_addr += sym.size
+            sym = Symbol(sym.addr, sym_name, sym.mode, sym.size)
         else:
             symbol_bytes = bin_data[cur_addr:next_addr]
             name = f'{cur_addr:08x}'
@@ -45,11 +48,17 @@ def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol]):
             cur_addr = next_addr
 
         o = ELF.from_bytes_single(symbol_bytes, sym)
+        all_o.append(o)
         o_file = split_dir / f'{sanitize(sym.name)}.o'
         o.write(o_file)
         splat.append((sym.addr, o_file))
 
-    print("[SPLIT PROGRESS] 100.00%")
+    total_bin_data = sum([len(o.data) for o in all_o])
+    if total_bin_data != bin_size:
+        raise Exception(f"Mismatch in binary data! Expected {bin_size}, got {total_bin_data}!")
+
+    if info.args['progress_reports']:
+        print("[SPLIT PROGRESS] 100.00%")
     return splat
 
 
