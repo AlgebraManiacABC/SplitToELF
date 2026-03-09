@@ -286,6 +286,7 @@ class ELF:
         # .text
         text_off = writer.tell()
         writer.write_bytes(self.data)
+        pad_to_4(writer)
         # .symtab
         symtab_off = writer.tell()
         writer.write_bytes(b'\x00' * 0x10) # 0th entry is null
