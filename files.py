@@ -2,7 +2,7 @@ import csv
 from pathlib import Path
 import argparse
 import yaml
-from ctrtype import CTRBinary, CRO
+from ctrtype import CTRBinary, CRO, ExHeader
 from util import Symbol, BinaryReader
 
 try:
@@ -14,15 +14,22 @@ except ImportError:
     HAS_TKINTER = False
 
 
-def gather_binaries(path: Path) -> dict[str, CTRBinary]:
+def gather_binaries(path: Path) -> tuple[ExHeader, dict[str, CTRBinary]]:
     binaries = dict()
+    exh = None
+    code_path = None
     for f in path.rglob('*'):
         if '.cro' in f.name:
             cro = CRO.from_reader(BinaryReader.from_path(f))
             binaries[f.name] = CTRBinary(f.name, cro)
         if 'code' in f.name:
-            binaries[f.name] = CTRBinary(f.name, f.read_bytes())
-    return binaries
+            code_path = f
+            # Wait to load until exheader is found
+        if 'header' in f.name or 'Header' in f.name:
+            exh = ExHeader.from_reader(BinaryReader.from_path(f))
+    if code_path:
+        binaries[code_path.name] = CTRBinary(code_path.name, code_path.read_bytes(), exh)
+    return exh, binaries
 
 
 def gather_compiled_object_files(path: Path) -> dict[str, list[Path]]:
@@ -64,6 +71,7 @@ def gather_sources(src_path: Path) -> dict[str,list[Path]]:
 
 class CTRPipelineInfo:
     def __init__(self, working_dir: Path, originals: list[Path],
+                 exheader: ExHeader,
                  binaries: dict[str,CTRBinary],
                  sources: dict[str, list[Path]],
                  build_dir: Path, split_dir: Path,
@@ -73,6 +81,7 @@ class CTRPipelineInfo:
                  recreating_binaries: bool, args):
         self.working_dir = working_dir
         self.originals = originals
+        self.exheader = exheader
         self.binaries = binaries
         self.sources = sources
         self.build_dir = build_dir
@@ -116,7 +125,7 @@ class CTRPipelineInfo:
             e = f"Pipeline incomplete for working dir {working_dir} (current dir {Path.cwd()})!"
             e += "".join(f"\nMissing {m}!" for m in missing)
             raise Exception(e)
-        binaries = gather_binaries(orig_dir)
+        exh, binaries = gather_binaries(orig_dir)
         sources = gather_sources(source_dir)
         symbols: dict[str, list[Symbol]] = dict()
         for f in sym_dir.iterdir():
@@ -125,7 +134,7 @@ class CTRPipelineInfo:
                 sym.addr -= binaries[f.stem].base_addr
             symbols[f.stem] = sym_list
         cc_info = yaml.safe_load(cc_info_path.read_text())
-        return cls(working_dir, originals, binaries, sources, build_dir, split_dir,
+        return cls(working_dir, originals, exh, binaries, sources, build_dir, split_dir,
                    out_dir, tool_dir, symbols, cc_info, recreating_binaries, args)
 
 
@@ -173,6 +182,18 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
         default=False,
         help="Skip generating the split `.o` files - a good idea to use"
              "if there are no symbol changes and they were already generated"
+    )
+    parser.add_argument(
+        "--skip-compile",
+        action="store_true",
+        default=False,
+        help="Skip compilation and use all `.o` files as-is from the build directory"
+    )
+    parser.add_argument(
+        "--use-splits-only",
+        action="store_true",
+        default=False,
+        help="Skip compilation and only rely on the splat binaries"
     )
 
     args = parser.parse_args(argv[1:])

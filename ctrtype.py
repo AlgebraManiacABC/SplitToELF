@@ -516,23 +516,25 @@ class CRO:
 
 
 class CTRBinary:
-    def __init__(self, name: str, binary: bytes | CRO):
+    def __init__(self, name: str, binary: bytes | CRO, exh: ExHeader = None):
         self.name = name
         self.binary = binary
         # Ensure real bytes are kept
         if isinstance(binary, CRO):
             self.data = self.binary.get_text_bytes() + self.binary.get_data_bytes()
             self.base_addr = self.binary.text.off
+            self.text_size = len(self.binary.text.obj)
         else:
             self.data = self.binary
             self.base_addr = 0x100000
+            self.text_size = exh.text.size
 
     @classmethod
-    def from_path(cls, path: Path) -> "CTRBinary":
+    def from_path(cls, path: Path, exh: ExHeader = None) -> "CTRBinary":
         if '.cro' in path.name:
             reader = BinaryReader.from_path(path)
             cro = CRO.from_reader(reader)
             return cls(path.name, cro)
         else:
             code = path.read_bytes()
-            return cls(path.name, code)
+            return cls(path.name, code, exh)
