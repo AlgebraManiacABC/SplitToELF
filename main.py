@@ -40,22 +40,32 @@ def main(argv: list[str]) -> int:
             print(f"Gathering split objects from {info.split_dir / name}...")
             targets = gather_splits(info.binaries[name], info.split_dir / name, info.symbols.get(name, []))
 
-        print(f"Compiling {name}!")
-        (info.build_dir / name).mkdir(parents=True, exist_ok=True)
-        compiled = compile_sources(name, info, objcopy)
+        if not info.args['skip_compile'] and not info.args['use_splits_only']:
+            print(f"Compiling {name}!")
+            (info.build_dir / name).mkdir(parents=True, exist_ok=True)
+            compiled = compile_sources(name, info, objcopy)
 
-        if info.args['compile_only']:
-            if info.args['progress_reports']:
-                print(f"COMPILATION OF {name.upper()} COMPLETE!")
-            continue
+            if info.args['compile_only']:
+                if info.args['progress_reports']:
+                    print(f"COMPILATION OF {name.upper()} COMPLETE!")
+                continue
+        elif info.args['use_splits_only']:
+            print(f"Will not compile! (--use-splits-only set)")
+        else:
+            print(f"Gathering compiled objects from {info.build_dir / name}...")
+            compiled = list((info.build_dir / name).rglob('*.o'))
 
         # Generate objdiff json units
-        units, to_link = generate_objdiff_unit(name, info.working_dir, compiled, targets)
-        objdiff_units += units
+        if not info.args['use_splits_only']:
+            units, to_link = generate_objdiff_unit(name, info, compiled, targets, info.symbols[name])
+            objdiff_units += units
 
-        if info.recreating_binaries:
+        if info.args['recreate_binaries']:
             # Link
-            linked = link_by_seriatum(name, to_link, info.out_dir, ld, False, info)
+            if info.args['use_splits_only']:
+                linked = link_by_seriatum(name, [t[1] for t in targets], info.out_dir, ld, False, info)
+            else:
+                linked = link_by_seriatum(name, to_link, info.out_dir, ld, False, info)
 
             # Objcopy
             final_binary = recreate_binary(name, info.out_dir, objcopy, linked, info.binaries[name])
@@ -74,7 +84,7 @@ def main(argv: list[str]) -> int:
             if info.args['progress_reports']:
                 print(f"OBJECT CREATION COMPLETE FOR {name.upper()}!!")
 
-    if not info.args['compile_only']:
+    if not info.args['compile_only'] and not info.args['use_splits_only']:
         objdiff = {
             "$schema": "https://raw.githubusercontent.com/encounter/objdiff/main/config.schema.json",
             "build_target": False,

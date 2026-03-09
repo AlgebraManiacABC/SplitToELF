@@ -78,7 +78,7 @@ class CTRPipelineInfo:
                  out_dir: Path, tool_dir: Path,
                  symbols: dict[str, list[Symbol]],
                  cc_info: dict[str, dict[str, dict]],
-                 recreating_binaries: bool, args):
+                 args):
         self.working_dir = working_dir
         self.originals = originals
         self.exheader = exheader
@@ -90,12 +90,10 @@ class CTRPipelineInfo:
         self.tool_dir = tool_dir
         self.symbols = symbols
         self.cc_info = cc_info
-        self.recreating_binaries = recreating_binaries
         self.args = args
 
     @classmethod
-    def from_path(cls, working_dir: Path, recreating_binaries: bool,
-                  args) -> "CTRPipelineInfo":
+    def from_path(cls, working_dir: Path, args) -> "CTRPipelineInfo":
         orig_dir = working_dir / 'orig'
         originals = list(orig_dir.rglob('*'))
         source_dir = working_dir / 'src'
@@ -135,7 +133,7 @@ class CTRPipelineInfo:
             symbols[f.stem] = sym_list
         cc_info = yaml.safe_load(cc_info_path.read_text())
         return cls(working_dir, originals, exh, binaries, sources, build_dir, split_dir,
-                   out_dir, tool_dir, symbols, cc_info, recreating_binaries, args)
+                   out_dir, tool_dir, symbols, cc_info, args)
 
 
 def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
@@ -202,18 +200,9 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
     if not working_dir:
         if HAS_TKINTER:
             working_dir = filedialog.askdirectory(mustexist=True, title="Choose working directory")
-            recreating_binaries = messagebox.askyesno(
-                "Recreate originals?",
-                "Should this program attempt to link the created objects and recreate the original binaries?"
-            )
-        else:
-            parser.error("Working directory required when tkinter is not available.")
-    else:
-        recreating_binaries = args.recreate_binaries
-
     if not working_dir:
         raise Exception("Did not pick a working directory!")
 
     args = vars(args)
 
-    return CTRPipelineInfo.from_path(Path(args['dir']), recreating_binaries, args)
+    return CTRPipelineInfo.from_path(Path(args['dir']), args)

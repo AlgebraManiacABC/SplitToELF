@@ -78,7 +78,8 @@ def compile_sources(name: str, info, objcopy):
     return compiled
 
 
-def generate_objdiff_unit(name: str, working_dir: Path, compiled: list[Path], targets: list[tuple[int, Path]]) -> tuple[list, list[Path]]:
+def generate_objdiff_unit(name: str, info: CTRPipelineInfo, compiled: list[Path],
+                          targets: list[tuple[int, Path]], symbols: list[Symbol]) -> tuple[list, list[Path]]:
     # Generate objdiff json units
     objdiff_units = []
     target_dict: dict[int, Path] = {addr: path for addr, path in targets}
@@ -93,8 +94,8 @@ def generate_objdiff_unit(name: str, working_dir: Path, compiled: list[Path], ta
             to_link.append(t_path)
         objdiff_units.append({
             "name": f'{name}/{t_path.stem}',
-            "target_path": str(t_path.relative_to(working_dir)),
-            "base_path": str(base_path.relative_to(working_dir)) if base_path else None,
+            "target_path": str(t_path.relative_to(info.working_dir)),
+            "base_path": str(base_path.relative_to(info.working_dir)) if base_path else None,
             "metadata": {
                 "progress_categories": [name],
                 "complete": False if base_path is None else None
