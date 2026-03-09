@@ -47,6 +47,9 @@ class ELFHeader:
         writer.write_u16(self.shnum)
         writer.write_u16(self.shstrndx)
 
+    def copy(self) -> "ELFHeader":
+        return ELFHeader(self.shoff, self.shnum, self.shstrndx, self.valid)
+
 
 class SectionHeaderEntry:
     def __init__(self, name_off: int, type: int, flags: int, addr: int, off: int,
@@ -330,3 +333,67 @@ class ELF:
         writer.write_u16(4 if self.global_syms or self.local_syms else 2) # shstrndx
 
         writer.flush(o_file)
+
+    def __add__(self, other: "ELF"):
+        data_size = len(self.data)
+        # Merge data
+        new_data = self.data + other.data
+        # Merge masks
+        new_mask = self.mask.copy().extend(other.mask)
+        # Merge symbols
+        strtab_size = len(self.strtab_bytes)
+        new_local_syms = self.local_syms.copy()
+        for sym in other.local_syms:
+            new_local_syms.append(SymbolTableEntry(
+                sym.name_off + strtab_size,
+                sym.value + data_size,
+                sym.size, sym.info, sym.other, sym.shndx
+            ))
+        new_global_syms = self.global_syms.copy()
+        for sym in other.global_syms:
+            new_global_syms.append(SymbolTableEntry(
+                sym.name_off + strtab_size,
+                sym.value + data_size,
+                sym.size, sym.info, sym.other, sym.shndx
+            ))
+
+        # Merge string tables and imported symbols
+        new_strtab_bytes = self.strtab_bytes + other.strtab_bytes
+        new_imported_symbols = self.imported_symbols + other.imported_symbols
+        new_header = self.header.copy()
+        return ELF(new_header, new_data, self.data_off, new_mask, new_imported_symbols, new_strtab_bytes, new_local_syms, new_global_syms)
+
+    def __iadd__(self, other):
+        data_size = len(self.data)
+        # Merge data
+        self.data += other.data
+        # Merge masks
+        self.mask.extend(other.mask)
+        # Merge symbols
+        strtab_size = len(self.strtab_bytes)
+        for sym in other.local_syms:
+            self.local_syms.append(SymbolTableEntry(
+                sym.name_off + strtab_size,
+                sym.value + data_size,
+                sym.size, sym.info, sym.other, sym.shndx
+            ))
+        for sym in other.global_syms:
+            self.global_syms.append(SymbolTableEntry(
+                sym.name_off + strtab_size,
+                sym.value + data_size,
+                sym.size, sym.info, sym.other, sym.shndx
+            ))
+
+        # Merge string tables and imported symbols
+        self.strtab_bytes += other.strtab_bytes
+        self.imported_symbols += other.imported_symbols
+        return self
+
+    def __eq__(self, other: "ELF"):
+        if len(self.data) != len(other.data):
+            return False
+        for i in range(len(self.data)):
+            m = self.mask.mask[i] & other.mask.mask[i]
+            if (self.data[i] & m) != (other.data[i] & m):
+                return False
+        return True
