@@ -98,7 +98,10 @@ def generate_objdiff_unit(name: str, info: CTRPipelineInfo, compiled: list[Path]
     to_link = []
     sorted_targets = sorted(target_dict.items())
     t_addrs_merged = []
+    num_targets = len(sorted_targets)
     for i, t_info in enumerate(sorted_targets):
+        if info.args['progress_reports'] and (i / num_targets) % 100 == 0:
+            print(f"[OBJDIFF PROGRESS] {i / num_targets}%")
         t_addr, t_path = t_info
         if t_addr in t_addrs_merged:
             continue
@@ -143,6 +146,8 @@ def generate_objdiff_unit(name: str, info: CTRPipelineInfo, compiled: list[Path]
         })
     for base_path in compiled_dict.values():
         print(f"Mismatching filename not found in target: {base_path}")
+    if info.args['progress_reports']:
+        print('[OBJDIFF PROGRESS] 100.0%')
     return objdiff_units, to_link
 
 

@@ -315,7 +315,7 @@ class ELF:
         SectionHeaderEntry(0, 0, 0, 0, 0,
                            0, 0, 0, 0, 0).write(writer)
         SectionHeaderEntry(text_name_off, SectionHeaderType.SHT_PROGBITS, 0x6, 0, text_off,
-                           len(self.data), 0, 0, 0, 0).write(writer)
+                           len(self.data), 0, 0, 0, 1).write(writer)
         if self.global_syms or self.local_syms:
             SectionHeaderEntry(symtab_name_off, SectionHeaderType.SHT_SYMTAB, 0, 0, symtab_off,
                            strtab_off - symtab_off, 3, len(self.local_syms) + 1, 0x10).write(writer)

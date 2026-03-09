@@ -56,6 +56,7 @@ def main(argv: list[str]) -> int:
             compiled = list((info.build_dir / name).rglob('*.o'))
 
         # Generate objdiff json units
+        print("Preparing to link!")
         if not info.args['use_splits_only']:
             units, to_link = generate_objdiff_unit(name, info, compiled, targets)
             objdiff_units += units
