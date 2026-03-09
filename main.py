@@ -57,7 +57,7 @@ def main(argv: list[str]) -> int:
 
         # Generate objdiff json units
         if not info.args['use_splits_only']:
-            units, to_link = generate_objdiff_unit(name, info, compiled, targets, info.symbols[name])
+            units, to_link = generate_objdiff_unit(name, info, compiled, targets)
             objdiff_units += units
 
         if info.args['recreate_binaries']:

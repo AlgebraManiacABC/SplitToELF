@@ -4,15 +4,24 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import subprocess
 from ctrtype import CRO, CTRBinary
-from util import subp_run, BinaryWriter, EXIT_SUCCESS
+from elf import ELF
+from files import CTRPipelineInfo
+from util import subp_run, BinaryWriter, EXIT_SUCCESS, Symbol
 
 
 def compile_sources(name: str, info, objcopy):
     # Compile
+    build_dir = info.build_dir / name
+    src_dir = info.working_dir / 'src' / name
     to_compile = info.sources.get(name, [])
     compiled = []
     default = info.cc_info.get('default', None)
-    ignore_list = info.cc_info.get(name, {}).get('ignored', [])
+    ignore_list_raw = info.cc_info.get(name, {}).get('ignored', [])
+    ignore_list = []
+    print(f"Source directory: {src_dir}")
+    for i in ignore_list_raw:
+        ignore_list += list(Path.rglob(src_dir,str(i)))
+    print(f"Ignoring {len(ignore_list)} files!")
     errored = []
     num_to_compile = len(to_compile)
     compile_futures = []
@@ -37,13 +46,13 @@ def compile_sources(name: str, info, objcopy):
         with lock:
             completed_count += 1
             if progress_reports and (completed_count % math.ceil(num_to_compile / 100)) == 0:
-                print(f"[COMPILER PROGRESS] {completed_count / num_to_compile:.1f}%")
+                print(f"[COMPILER PROGRESS] {100 * completed_count / num_to_compile:.1f}%")
         return ret
 
     with ThreadPoolExecutor() as executor:
-        (info.build_dir / name).mkdir(parents=True, exist_ok=True)
+        build_dir.mkdir(parents=True, exist_ok=True)
         for c in to_compile:
-            if c.name in ignore_list:
+            if c in ignore_list or c.name in ignore_list:
                 continue
             bld = info.build_dir / name / (c.stem + '.o')
             d = info.cc_info[name].get(c.name, None)
@@ -79,17 +88,46 @@ def compile_sources(name: str, info, objcopy):
 
 
 def generate_objdiff_unit(name: str, info: CTRPipelineInfo, compiled: list[Path],
-                          targets: list[tuple[int, Path]], symbols: list[Symbol]) -> tuple[list, list[Path]]:
+                          targets: list[tuple[int, Path]]) -> tuple[list, list[Path]]:
     # Generate objdiff json units
     objdiff_units = []
     target_dict: dict[int, Path] = {addr: path for addr, path in targets}
     compiled_dict = {path.stem: path for path in compiled}
     to_link = []
-    for t_addr, t_path in sorted(target_dict.items()):
+    sorted_targets = sorted(target_dict.items())
+    t_addrs_merged = []
+    for i, t_info in enumerate(sorted_targets):
+        t_addr, t_path = t_info
+        if t_addr in t_addrs_merged:
+            continue
         base_path = compiled_dict.get(t_path.stem, None)
         if base_path:
-            compiled_dict.pop(t_path.stem)
-            to_link.append(base_path)
+            # Matching file exists. But only link if contents match
+            o_file = compiled_dict.pop(t_path.stem)
+            b_elf = ELF.from_path(o_file)
+            t_elf = ELF.from_path(t_path)
+            t_elf_original_size = len(t_elf.data)
+            t_addrs_to_merge = []
+            while len(b_elf.data) > len(t_elf.data) and len(t_elf.data) + t_addr < info.binaries[name].text_size:
+                # Attempt to merge binaries
+                t_addr_2, t_path_2 = sorted_targets[i+1]
+                t_addrs_to_merge.append(t_addr_2)
+                i += 1
+                t_elf += ELF.from_path(t_path_2)
+            if b_elf == t_elf:
+                to_link.append(o_file)
+                t_addrs_merged += t_addrs_to_merge
+            elif t_addrs_to_merge:
+                print(f"Object file {o_file} (.text size {len(b_elf.data)}) was larger than"
+                      f"{t_path} (.text size {t_elf_original_size}) and was compared with:")
+                for a in t_addrs_to_merge:
+                    print(f" - {target_dict[a]}")
+                print(f"In order to create a new ELF with .text size {len(t_elf.data)}...")
+                print(f"And yet it was not equivalent! Using linked version instead.")
+                to_link.append(t_path)
+            else:
+                print(f"Object file {o_file} did not match {t_path}! Using linked version instead.")
+                to_link.append(t_path)
         else:
             to_link.append(t_path)
         objdiff_units.append({
