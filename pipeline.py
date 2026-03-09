@@ -30,10 +30,11 @@ def compile_sources(name: str, info, objcopy):
 
     def compile_source(c_path: Path, o_path: Path, cc: str,
                        flags: list[str], objcopy: str, ignore_compiler_errors: bool,
-                       progress_reports: bool) -> tuple[bool, Path]:
+                       progress_reports: bool, verbose: bool) -> tuple[bool, Path]:
         nonlocal completed_count
         cmd = [cc, *flags, str(c_path), '-c', '-o', str(o_path)]
-        # print(" ".join(cmd))
+        if verbose:
+            print(" ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != EXIT_SUCCESS:
             if ignore_compiler_errors:
@@ -63,7 +64,8 @@ def compile_sources(name: str, info, objcopy):
             compile_futures.append(
                 executor.submit(compile_source, c, bld, str(cc), flags, objcopy,
                                 info.args['ignore_compiler_errors'],
-                                info.args['progress_reports'])
+                                info.args['progress_reports'],
+                                info.args['verbose_compilation'])
             )
 
     for f in compile_futures:

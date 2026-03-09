@@ -193,6 +193,12 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
         default=False,
         help="Skip compilation and only rely on the splat binaries"
     )
+    parser.add_argument(
+        "--verbose-compilation",
+        action="store_true",
+        default=False,
+        help="Output compiler commands"
+    )
 
     args = parser.parse_args(argv[1:])
 
