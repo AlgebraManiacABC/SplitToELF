@@ -87,10 +87,10 @@ class CTRSectionInfo(OffSize):
 
 class ExHeader:
     def __init__(self, text, rodata, data, bss):
-        self.text = text
-        self.rodata = rodata
-        self.data = data
-        self.bss = bss
+        self.text: CTRSectionInfo = text
+        self.rodata: CTRSectionInfo = rodata
+        self.data: CTRSectionInfo = data
+        self.bss: CTRSectionInfo = bss
 
     @classmethod
     def from_reader(cls, reader: BinaryReader) -> "ExHeader":
