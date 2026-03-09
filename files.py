@@ -167,6 +167,13 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
         default=True,
         help="Whether to report [PROGRESS] __._% during compiling, splitting, and linking"
     )
+    parser.add_argument(
+        "--skip-split",
+        action="store_true",
+        default=False,
+        help="Skip generating the split `.o` files - a good idea to use"
+             "if there are no symbol changes and they were already generated"
+    )
 
     args = parser.parse_args(argv[1:])
 

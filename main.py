@@ -3,7 +3,7 @@ import sys
 import json
 from files import gather_bearings
 from pipeline import link_by_seriatum, generate_objdiff_unit, recreate_binary, compile_sources
-from split import split_by_symbols
+from split import split_by_symbols, gather_splits
 from util import EXIT_SUCCESS, EXIT_FAILURE
 
 
@@ -32,10 +32,13 @@ def main(argv: list[str]) -> int:
     objdiff_units = []
 
     for name in info.binaries.keys():
-        if not info.args['compile_only']:
+        if not info.args['compile_only'] and not info.args['skip_split']:
             print(f"Splitting {name}!")
             (info.split_dir / name).mkdir(parents=True, exist_ok=True)
             targets = split_by_symbols(info.binaries[name], info.split_dir / name, info.symbols.get(name, []), info)
+        else:
+            print(f"Gathering split objects from {info.split_dir / name}...")
+            targets = gather_splits(info.binaries[name], info.split_dir / name, info.symbols.get(name, []))
 
         print(f"Compiling {name}!")
         (info.build_dir / name).mkdir(parents=True, exist_ok=True)

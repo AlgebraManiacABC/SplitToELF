@@ -7,6 +7,43 @@ from ctrtype import CTRBinary
 from util import find_all_bytes, Symbol, sanitize
 
 
+def gather_splits(binary: CTRBinary, split_dir: Path, symbols: list[Symbol]):
+    bin_size = len(binary.data)
+    symbol_dict = {sym.addr: sym for sym in symbols}
+    addrs = sorted([sym.addr for sym in symbols if sym.addr >= 0])
+    splat = []
+    cur_addr = 0
+    while addrs or cur_addr < bin_size:
+        if not addrs:
+            # Fully finished, yet there are still trailing bytes
+            sym_name = f'{cur_addr:08x}'
+            sym_size = bin_size - cur_addr
+            cur_addr += sym_size
+        elif cur_addr == addrs[0]:
+            # We reached a symbol definition; split it!
+            sym = symbol_dict[cur_addr]
+            sym_name = sanitize(sym.name)
+            sym_size = sym.size
+            next_addr = addrs[1] if len(addrs) > 1 else bin_size
+            if cur_addr + sym_size > next_addr:
+                sym_size = next_addr - cur_addr
+            cur_addr += sym_size
+            addrs.pop(0)  # Remove the address after processing
+        elif cur_addr < addrs[0]:
+            # Current address needs to keep up! This is safe to treat as data.
+            sym_name = f'{cur_addr:08x}'
+            cur_addr = addrs[0]
+        else: # cur_addr > addrs[0]
+            # This should be impossible!!
+            raise RuntimeError(f"cur_addr ({cur_addr:08x}) grew beyond the next symbol (at {addrs[0]:08x})! Contact the developer!")
+
+        o_file = split_dir / f'{sanitize(sym_name)}.o'
+        if not o_file.exists():
+            raise Exception(f"Skipped splitting object files, yet {o_file} does not exist (it should)!")
+        splat.append((cur_addr, o_file))
+    return splat
+
+
 def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol], info):
     """
     Creates object files for all symbols in the list,

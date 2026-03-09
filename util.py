@@ -164,6 +164,14 @@ class Bitmask:
             case _:
                 print(f"Found {rel_entry.type.name}, but this is unimplemented!")
 
+    def extend(self, mask: "Bitmask"):
+        self.mask.extend(mask.mask)
+
+    def copy(self) -> "Bitmask":
+        cpy = Bitmask(len(self.mask))
+        cpy.mask = self.mask.copy()
+        return cpy
+
 
 def get_name(data: bytes, off: int) -> str:
     end = data.index(b'\x00', off)
