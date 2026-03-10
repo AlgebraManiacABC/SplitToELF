@@ -14,19 +14,21 @@ except ImportError:
     HAS_TKINTER = False
 
 
-def gather_binaries(path: Path) -> tuple[ExHeader, dict[str, CTRBinary]]:
+def gather_binaries(path: Path, module: str=None) -> tuple[ExHeader, dict[str, CTRBinary]]:
     binaries = dict()
     exh = None
     code_path = None
     for f in path.rglob('*'):
+        if 'header' in f.name or 'Header' in f.name:
+            exh = ExHeader.from_reader(BinaryReader.from_path(f))
+        if module and module not in f.name:
+            continue
         if '.cro' in f.name:
             cro = CRO.from_reader(BinaryReader.from_path(f))
             binaries[f.name] = CTRBinary(f.name, cro)
         if 'code' in f.name:
-            code_path = f
             # Wait to load until exheader is found
-        if 'header' in f.name or 'Header' in f.name:
-            exh = ExHeader.from_reader(BinaryReader.from_path(f))
+            code_path = f
     if code_path:
         binaries[code_path.name] = CTRBinary(code_path.name, code_path.read_bytes(), exh)
     return exh, binaries
@@ -60,10 +62,10 @@ def gather_symbols(sym_path: Path) -> list[Symbol]:
     return symbols
 
 
-def gather_sources(src_path: Path) -> dict[str,list[Path]]:
+def gather_sources(src_path: Path, module: str=None) -> dict[str,list[Path]]:
     objects = dict()
     for sub_dir in src_path.iterdir():
-        if sub_dir.is_dir():
+        if sub_dir.is_dir() and module and sub_dir.name == module:
             objects[sub_dir.name] = list(sub_dir.rglob('*.c*'))
     return objects
 
@@ -123,10 +125,12 @@ class CTRPipelineInfo:
             e = f"Pipeline incomplete for working dir {working_dir} (current dir {Path.cwd()})!"
             e += "".join(f"\nMissing {m}!" for m in missing)
             raise Exception(e)
-        exh, binaries = gather_binaries(orig_dir)
-        sources = gather_sources(source_dir)
+        exh, binaries = gather_binaries(orig_dir, args['single_binary'])
+        sources = gather_sources(source_dir, args['single_binary'])
         symbols: dict[str, list[Symbol]] = dict()
         for f in sym_dir.iterdir():
+            if args['single_binary'] and args['single_binary'] not in f.name:
+                continue
             sym_list = gather_symbols(f)
             for sym in sym_list:
                 sym.addr -= binaries[f.stem].base_addr
@@ -198,6 +202,11 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
         action="store_true",
         default=False,
         help="Output compiler commands"
+    )
+    parser.add_argument(
+        "--single-binary",
+        metavar="BINARY_NAME",
+        help="If provided, will operate on only the single binary provided"
     )
 
     args = parser.parse_args(argv[1:])
