@@ -15,7 +15,7 @@ def main(argv: list[str]) -> int:
     """
 
     info = gather_bearings(argv)
-    print(f"Source file count: {sum([len(info.sources[name]) for name in info.binaries])}")
+    print(f"Source file count: {sum([len(info.sources[name]) for name in info.binaries if name in info.sources.keys()])}")
     print(f"Binaries loaded (and their symbol counts):")
     for binary, sym_dict in zip(sorted(info.binaries), sorted(info.symbols.items())):
         print(f"   * {binary}: {len(sym_dict[1])} symbols")
