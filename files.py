@@ -196,28 +196,16 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
         prog="3DS-Decomp-Pipeline",
         description="CTR decompilation pipeline tool"
     )
+    # Meta
     parser.add_argument(
         "dir",
         nargs="?",
         help="Working directory"
     )
     parser.add_argument(
-        "--recreate-binaries",
-        action="store_true",
-        default=False,
-        help="Attempt to link objects and recreate original binaries"
-    )
-    parser.add_argument(
-        "--compile-only",
-        action="store_true",
-        default=False,
-        help="Only compile, do not link"
-    )
-    parser.add_argument(
-        "--ignore-compiler-errors",
-        action="store_true",
-        default=False,
-        help="When the compiler fails, do not exit (will not report)"
+        "--single-binary",
+        metavar="BINARY_NAME",
+        help="If provided, will operate on only the single binary provided"
     )
     parser.add_argument(
         "--progress-reports",
@@ -225,6 +213,7 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
         default=True,
         help="Whether to report [PROGRESS] __._% during compiling, splitting, and linking"
     )
+    # Splitting
     parser.add_argument(
         "--skip-split",
         action="store_true",
@@ -233,16 +222,23 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
              "if there are no symbol changes and they were already generated"
     )
     parser.add_argument(
-        "--skip-compile",
-        action="store_true",
-        default=False,
-        help="Skip compilation and use all `.o` files as-is from the build directory"
-    )
-    parser.add_argument(
-        "--use-splits-only",
+        "--use-splits-only", # i.e., do not compile
         action="store_true",
         default=False,
         help="Skip compilation and only rely on the splat binaries"
+    )
+    # Compiling
+    parser.add_argument(
+        "--compile-only",
+        action="store_true",
+        default=False,
+        help="Only compile, do not split or link"
+    )
+    parser.add_argument(
+        "--ignore-compiler-errors",
+        action="store_true",
+        default=False,
+        help="When the compiler fails, do not exit (will not report)"
     )
     parser.add_argument(
         "--verbose-compilation",
@@ -251,9 +247,17 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
         help="Output compiler commands"
     )
     parser.add_argument(
-        "--single-binary",
-        metavar="BINARY_NAME",
-        help="If provided, will operate on only the single binary provided"
+        "--skip-compile",
+        action="store_true",
+        default=False,
+        help="Skip compilation and use all `.o` files as-is from the build directory"
+    )
+    # Linking
+    parser.add_argument(
+        "--recreate-binaries",
+        action="store_true",
+        default=False,
+        help="Attempt to link objects and recreate original binaries"
     )
 
     args = parser.parse_args(argv[1:])
