@@ -159,8 +159,15 @@ class Bitmask:
 
     def add_relocation(self, rel_entry: RelocationEntry):
         match rel_entry.type:
-            case RelocationType.R_ARM_CALL:
+            case RelocationType.R_ARM_CALL | RelocationType.R_ARM_JUMP24:
+                # ARM BL/B: offset encoded in lower 3 bytes of 4-byte instruction
                 self.mask[rel_entry.off: rel_entry.off + 3] = b'\x00' * 3
+            case RelocationType.R_ARM_THM_PC22:
+                # Thumb BL/B.W: offset spread across both halfwords (4 bytes total)
+                self.mask[rel_entry.off: rel_entry.off + 4] = b'\x00' * 4
+            case RelocationType.R_ARM_ABS32 | RelocationType.R_ARM_REL32 | RelocationType.R_ARM_TARGET1 | RelocationType.R_ARM_PREL31:
+                # 4-byte absolute/relative relocations
+                self.mask[rel_entry.off: rel_entry.off + 4] = b'\x00' * 4
             case _:
                 print(f"Found {rel_entry.type.name}, but this is unimplemented!")
 
