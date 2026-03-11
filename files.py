@@ -62,13 +62,15 @@ def gather_symbols(sym_path: Path) -> list[Symbol]:
     return symbols
 
 
-def gather_sources(src_path: Path, module: str=None) -> dict[str,list[Path]]:
-    objects = dict()
+def gather_sources(src_path: Path, cc_info: "CTRPipelineInfo", module: str = None) -> dict[str, list[Path]]:
+    objects = {}
     for sub_dir in src_path.iterdir():
-        if sub_dir.is_dir() and module and sub_dir.name == module:
-            objects[sub_dir.name] = list(sub_dir.rglob('*.c*'))
+        if not sub_dir.is_dir() or (module and sub_dir.name != module):
+            continue
+        d_info = cc_info.get(sub_dir.name)
+        ignored = {p for path in (d_info.get('ignored', []) if d_info else []) for p in sub_dir.rglob(path)}
+        objects[sub_dir.name] = [p for p in sub_dir.rglob('*') if p.suffix in {'.c', '.cpp'} and p not in ignored]
     return objects
-
 
 
 class CTRPipelineInfo:

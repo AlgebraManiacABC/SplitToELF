@@ -13,23 +13,21 @@ def compile_sources(name: str, info, objcopy):
     # Compile
     build_dir = info.build_dir / name
     src_dir = info.working_dir / 'src' / name
-    to_compile = info.sources.get(name, [])
+    to_compile: list[Path] = info.sources.get(name, [])
     compiled = []
     default = info.cc_info.get('default', None)
     ignore_list_raw = info.cc_info.get(name, {}).get('ignored', [])
     ignore_list = []
-    print(f"Source directory: {src_dir}")
-    for i in ignore_list_raw:
-        ignore_list += list(Path.rglob(src_dir,str(i)))
-    print(f"Ignoring {len(ignore_list)} files!")
+    # print(f"Source directory: {src_dir}")
     errored = []
     num_to_compile = len(to_compile)
+    print(f"Compiling {num_to_compile} files!")
     compile_futures = []
     completed_count = 0
     lock = threading.Lock()
 
     def compile_source(c_path: Path, o_path: Path, cc: str,
-                       flags: list[str], objcopy: str, ignore_compiler_errors: bool,
+                       flags: list[str], ignore_compiler_errors: bool,
                        progress_reports: bool, verbose: bool) -> tuple[bool, Path]:
         nonlocal completed_count
         cmd = [cc, *flags, str(c_path), '-c', '-o', str(o_path)]
@@ -53,8 +51,6 @@ def compile_sources(name: str, info, objcopy):
     with ThreadPoolExecutor() as executor:
         build_dir.mkdir(parents=True, exist_ok=True)
         for c in to_compile:
-            if c in ignore_list or c.name in ignore_list:
-                continue
             bld = info.build_dir / name / (c.stem + '.o')
             d = info.cc_info[name].get(c.name, None)
             if not d:
@@ -62,7 +58,7 @@ def compile_sources(name: str, info, objcopy):
             cc = info.tool_dir / d['cc']
             flags = d['flags']
             compile_futures.append(
-                executor.submit(compile_source, c, bld, str(cc), flags, objcopy,
+                executor.submit(compile_source, c, bld, str(cc), flags,
                                 info.args['ignore_compiler_errors'],
                                 info.args['progress_reports'],
                                 info.args['verbose_compilation'])
