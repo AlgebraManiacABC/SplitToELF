@@ -128,7 +128,9 @@ class CTRPipelineInfo:
             e += "".join(f"\nMissing {m}!" for m in missing)
             raise Exception(e)
         exh, binaries = gather_binaries(orig_dir, args['single_binary'])
-        sources = gather_sources(source_dir, args['single_binary'])
+        cc_info = yaml.safe_load(cc_info_path.read_text())
+        cc_info = resolve_presets(cc_info)
+        sources = gather_sources(source_dir, cc_info, args['single_binary'])
         symbols: dict[str, list[Symbol]] = dict()
         for f in sym_dir.iterdir():
             if args['single_binary'] and args['single_binary'] not in f.name:
@@ -137,9 +139,52 @@ class CTRPipelineInfo:
             for sym in sym_list:
                 sym.addr -= binaries[f.stem].base_addr
             symbols[f.stem] = sym_list
-        cc_info = yaml.safe_load(cc_info_path.read_text())
         return cls(working_dir, originals, exh, binaries, sources, build_dir, split_dir,
                    out_dir, tool_dir, symbols, cc_info, args)
+
+
+def resolve_presets(cc_info: dict) -> dict:
+    """
+    Resolve preset definitions in cc.yaml.
+
+    Top-level 'presets' key defines reusable compiler configurations:
+        presets:
+          thumb:
+            cc: armcc_4.1_1049
+            flags: [--thumb]
+
+    Under each binary, a 'presets' key maps preset names to file lists:
+        code.bin:
+          presets:
+            thumb:
+              - FUN_00100794.c
+              - FUN_001013c4.c
+
+    This expands into per-file entries as if each file had been written out
+    individually with the preset's cc/flags.
+    - Claude Cowork, Opus 4.6
+    """
+    preset_defs = cc_info.pop('presets', {})
+    if not preset_defs:
+        return cc_info
+
+    for binary_name, binary_dict in cc_info.items():
+        if binary_name == 'default' or not isinstance(binary_dict, dict):
+            continue
+        file_presets = binary_dict.pop('presets', None)
+        if not file_presets:
+            continue
+        for preset_name, file_list in file_presets.items():
+            preset: dict = preset_defs.get(preset_name)
+            if not preset:
+                raise Exception(f"Preset '{preset_name}' used in '{binary_name}' but not defined in top-level 'presets'!")
+            if not isinstance(file_list, list):
+                raise Exception(f"Preset '{preset_name}' in '{binary_name}' must map to a list of filenames!")
+            for filename in file_list:
+                if filename not in binary_dict:
+                    binary_dict[filename] = preset
+
+    return cc_info
 
 
 def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
