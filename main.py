@@ -15,15 +15,10 @@ def main(argv: list[str]) -> int:
     """
 
     info = gather_bearings(argv)
-    print(f"Source file count: {len(info.sources)}")
-    print(f"Binaries to split:")
-    for binary in info.binaries:
-        print(f"\t{binary}")
-    print(f"Symbol files loaded:")
-    for sym_file, sym_list in info.symbols.items():
-        print(f"\t{sym_file} ({len(sym_list)} symbols)")
-    print(f"Build directory: {info.build_dir}")
-    print(f"Split directory: {info.split_dir}")
+    print(f"Source file count: {sum([len(info.sources[name]) for name in info.binaries])}")
+    print(f"Binaries loaded (and their symbol counts):")
+    for binary, sym_dict in zip(sorted(info.binaries), sorted(info.symbols.items())):
+        print(f"   * {binary}: {len(sym_dict[1])} symbols")
     print(f"Final output directory: {info.out_dir}")
 
     ld = str((info.tool_dir / 'ld').resolve())
@@ -37,7 +32,7 @@ def main(argv: list[str]) -> int:
             (info.split_dir / name).mkdir(parents=True, exist_ok=True)
             targets = split_by_symbols(info.binaries[name], info.split_dir / name, info.symbols.get(name, []), info)
         else:
-            print(f"Gathering split objects from {info.split_dir / name}...")
+            print(f"Gathering split objects for {name}...")
             targets = gather_splits(info.binaries[name], info.split_dir / name, info.symbols.get(name, []))
 
         if not info.args['skip_compile'] and not info.args['use_splits_only']:
@@ -57,16 +52,15 @@ def main(argv: list[str]) -> int:
 
         # Generate objdiff json units
         print("Preparing to link!")
+        to_link = []
         if not info.args['use_splits_only']:
             units, to_link = generate_objdiff_unit(name, info, compiled, targets)
             objdiff_units += units
 
         if info.args['recreate_binaries']:
             # Link
-            if info.args['use_splits_only']:
-                linked = link_by_seriatum(name, [t[1] for t in targets], info.out_dir, ld, False, info)
-            else:
-                linked = link_by_seriatum(name, to_link, info.out_dir, ld, False, info)
+            to_link = to_link if info.args['use_splits_only'] else [t[1] for t in targets]
+            linked = link_by_seriatum(name, to_link, info.out_dir, ld, False, info)
 
             # Objcopy
             final_binary = recreate_binary(name, info.out_dir, objcopy, linked, info.binaries[name])
