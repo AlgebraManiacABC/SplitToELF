@@ -157,7 +157,7 @@ def link_by_seriatum(name: str, to_link: list[Path], out_dir: Path, ld: str, ver
         linked = out_dir / f'{name}_linked_{bounds[0]}'
         response_file.write_text('\n'.join('"' + str(o).replace('\\', '/') + '"' for o in to_link[bounds[0]:bounds[1]]))
         cmd = [ld, '--entry=0', '--no-warn-mismatch', '-r', f'@{response_file}', '-o', str(linked)]
-        if info.args['progress_reports']:
+        if info.args['progress_reports'] and (i % math.ceil(len(link_bounds)/100)) == 0:
             print(f"[LINKER PROGRESS] {link_by * i / len(link_bounds):.1f}%")
         subp_run(cmd, verbose, "Linker error!")
         temp_links.append(linked)
