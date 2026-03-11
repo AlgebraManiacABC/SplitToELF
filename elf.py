@@ -234,7 +234,7 @@ class ELF:
                     sym = (local_syms + global_syms)[rel_entry.symbol_index]
                     # strings should NOT be None here
                     rel_name = get_name(strings, sym.name_off)
-                    print(f"Name to relocate: {rel_name}")
+                    # print(f"Name to relocate: {rel_name}")
                     undefined_symbols.append(rel_name)
                     mask.add_relocation(rel_entry)
 
