@@ -59,7 +59,7 @@ def main(argv: list[str]) -> int:
 
         if info.args['recreate_binaries']:
             # Link
-            to_link = to_link if info.args['use_splits_only'] else [t[1] for t in targets]
+            to_link = to_link if not info.args['use_splits_only'] else [t[1] for t in targets]
             linked = link_by_seriatum(name, to_link, info.out_dir, ld, False, info)
 
             # Objcopy
