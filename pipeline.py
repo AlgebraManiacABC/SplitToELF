@@ -67,8 +67,9 @@ def compile_sources(name: str, info, objcopy):
     for f in compile_futures:
         ok, path = f.result()
         if ok:
-            # Since armcc doesn't globalize the symbol (and we might need it for linking), globalize with objcopy
-            cmd = [objcopy, f'--globalize-symbol={path.stem}', str(path)]
+            # Globalize the symbol and set .text alignment to 1 byte
+            cmd = [objcopy, f'--globalize-symbol={path.stem}',
+                   '--set-section-alignment', '.text=1', str(path)]
             subp_run(cmd, False, f"Objcopy error on {path}!")
             compiled.append(path)
         else:
@@ -146,6 +147,7 @@ def generate_objdiff_unit(name: str, info: CTRPipelineInfo, compiled: list[Path]
         print('[OBJDIFF PROGRESS] 100.0%')
     return objdiff_units, to_link
 
+LD_FLAGS = ['--entry=0', '--no-warn-mismatch']
 
 def link_by_seriatum(name: str, to_link: list[Path], out_dir: Path, ld: str, verbose: bool, info) -> Path:
     # Link (in groups of files, so we can see progress)
@@ -156,7 +158,7 @@ def link_by_seriatum(name: str, to_link: list[Path], out_dir: Path, ld: str, ver
     for i, bounds in enumerate(link_bounds):
         linked = out_dir / f'{name}_linked_{bounds[0]}'
         response_file.write_text('\n'.join('"' + str(o).replace('\\', '/') + '"' for o in to_link[bounds[0]:bounds[1]]))
-        cmd = [ld, '--entry=0', '--no-warn-mismatch', '-r', f'@{response_file}', '-o', str(linked)]
+        cmd = [ld, *LD_FLAGS, '-r', f'@{response_file}', '-o', str(linked)]
         if info.args['progress_reports'] and (i % math.ceil(len(link_bounds)/100)) == 0:
             print(f"[LINKER PROGRESS] {link_by * i / len(link_bounds):.1f}%")
         subp_run(cmd, verbose, "Linker error!")
@@ -166,11 +168,10 @@ def link_by_seriatum(name: str, to_link: list[Path], out_dir: Path, ld: str, ver
     if info.args['progress_reports']:
         print("[LINKER PROGRESS] Performing final link...")
     response_file.write_text('\n'.join(str(o).replace('\\', '/') for o in temp_links))
-    cmd = [ld, '--entry=0', '--no-warn-mismatch',
-           f'@{response_file}', '-o', str(linked)]
+    cmd = [ld, *LD_FLAGS, f'@{response_file}', '-o', str(linked), '-Map', str(linked) + ".map"]
     subp_run(cmd, True, "Linker error!")
-    for link in temp_links:
-        link.unlink()
+    # for link in temp_links:
+    #     link.unlink()
     response_file.unlink()
     return linked
 
@@ -181,8 +182,7 @@ def link_all(name: str, to_link: list[Path], out_dir: Path, ld: str, info) -> Pa
     if info.args['progress_reports']:
         print("[LINKER PROGRESS] Performing final link...")
     response_file.write_text('\n'.join(str(o).replace('\\', '/') for o in to_link))
-    cmd = [ld, '--entry=0', '--no-warn-mismatch',
-           f'@{response_file}', '-o', str(linked)]
+    cmd = [ld, *LD_FLAGS, f'@{response_file}', '-o', str(linked)]
     subp_run(cmd, True, "Linker error!")
     response_file.unlink()
     return linked
