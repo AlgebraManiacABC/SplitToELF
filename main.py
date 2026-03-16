@@ -2,7 +2,7 @@ import hashlib
 import sys
 import json
 from files import gather_bearings
-from pipeline import link_by_seriatum, generate_objdiff_unit, recreate_binary, compile_sources
+from pipeline import *
 from split import split_by_symbols, gather_splits
 from util import EXIT_SUCCESS, EXIT_FAILURE
 
@@ -52,19 +52,25 @@ def main(argv: list[str]) -> int:
 
         # Generate objdiff json units
         print("Preparing to link!")
-        to_link = []
         if not info.args['use_splits_only']:
-            units, to_link = generate_objdiff_unit(name, info, compiled, targets)
-            objdiff_units += units
+            _, to_link = generate_function_objdiff_units(name, info, compiled, targets)
+        else:
+            to_link = [t[1] for t in targets]
+
+        # Disregard function-wise units and instead use module units:
+        unit, objdiff_to_link = generate_module_objdiff_unit(name, to_link, info, compiled)
+        objdiff_units += unit
 
         if info.args['recreate_binaries']:
             # Link
-            to_link = to_link if not info.args['use_splits_only'] else [t[1] for t in targets]
-            linked = link_by_seriatum(name, to_link, info.out_dir, ld, False, info)
+            # linked = link_by_seriatum(name, to_link, info.out_dir, ld, False, info)
+            linked = link_all(name, to_link, info.out_dir, ld, info)
+            objdiff_dir = info.out_dir / 'objdiff'
+            objdiff_dir.mkdir(parents=True, exist_ok=True)
+            objdiff_linked = link_all_keep_relocatable(name, objdiff_to_link, objdiff_dir, ld)
 
             # Objcopy
             final_binary = recreate_binary(name, info.out_dir, objcopy, linked, info.binaries[name])
-            linked.unlink()
 
             # Hash check - did we create an identical binary?
             de_novo = hashlib.sha256(final_binary.read_bytes()).digest()
@@ -79,7 +85,7 @@ def main(argv: list[str]) -> int:
             if info.args['progress_reports']:
                 print(f"OBJECT CREATION COMPLETE FOR {name.upper()}!!")
 
-    if not info.args['compile_only'] and not info.args['use_splits_only']:
+    if info.args['recreate_binaries']:
         objdiff = {
             "$schema": "https://raw.githubusercontent.com/encounter/objdiff/main/config.schema.json",
             "build_target": False,
