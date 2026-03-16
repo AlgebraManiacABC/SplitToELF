@@ -30,6 +30,9 @@ def compile_sources(name: str, info, objcopy):
                        flags: list[str], ignore_compiler_errors: bool,
                        progress_reports: bool, verbose: bool) -> tuple[bool, Path]:
         nonlocal completed_count
+        # Double check we even *need* to compile (is object file newer than .c?)
+        if o_path.stat().st_mtime > c_path.stat().st_mtime:
+            return True, o_path
         cmd = [cc, *flags, str(c_path), '-c', '-o', str(o_path)]
         if verbose:
             print(" ".join(cmd))
@@ -86,7 +89,18 @@ def compile_sources(name: str, info, objcopy):
     return compiled
 
 
-def generate_objdiff_unit(name: str, info: CTRPipelineInfo, compiled: list[Path],
+def generate_module_objdiff_unit(name: str, to_link: list[Path], info: CTRPipelineInfo,
+                                 compiled: list[Path]) -> tuple[dict, list[Path]]:
+    objdiff_to_link = [obj for obj in to_link if obj in compiled]
+    objdiff_dict = {
+        "name": f'{name}',
+        "target_path": info.out_dir / name,
+        "base_path": info.out_dir / 'objdiff' / name
+    }
+    return objdiff_dict, objdiff_to_link
+
+
+def generate_function_objdiff_units(name: str, info: CTRPipelineInfo, compiled: list[Path],
                           targets: list[tuple[int, Path]]) -> tuple[list, list[Path]]:
     # Generate objdiff json units
     objdiff_units = []
@@ -182,7 +196,18 @@ def link_all(name: str, to_link: list[Path], out_dir: Path, ld: str, info) -> Pa
     if info.args['progress_reports']:
         print("[LINKER PROGRESS] Performing final link...")
     response_file.write_text('\n'.join(str(o).replace('\\', '/') for o in to_link))
-    cmd = [ld, *LD_FLAGS, f'@{response_file}', '-o', str(linked)]
+    cmd = [ld, *LD_FLAGS, f'@{response_file}', '-o', str(linked), '-Map', str(linked) + '.map']
+    subp_run(cmd, True, "Linker error!")
+    # response_file.unlink()
+    return linked
+
+
+def link_all_keep_relocatable(name: str, to_link: list[Path], out_dir: Path, ld: str) -> Path:
+    response_file = out_dir / f'{name}.txt'
+    linked = out_dir / f'{name}_linked'
+    response_file.write_text('\n'.join(str(o).replace('\\','/') for o in to_link))
+    cmd = [ld, '--entry=0', '--no-warn-mismatch', '-r',
+           f'@{response_file}', '-o', str(linked)]
     subp_run(cmd, True, "Linker error!")
     response_file.unlink()
     return linked
