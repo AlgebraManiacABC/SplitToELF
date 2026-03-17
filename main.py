@@ -64,18 +64,20 @@ def main(argv: list[str]) -> int:
             objdiff_base_dir.mkdir(parents=True, exist_ok=True)
             print(f"Linking all bases for objdiff!")
             base = link_all_keep_relocatable(name, objdiff_to_link, objdiff_base_dir, ld)
+            base_path = (info.out_dir / 'objdiff_base' / f'{name}').relative_to(info.working_dir)
             # Target
             objdiff_target_dir = info.out_dir / 'objdiff_target'
             objdiff_target_dir.mkdir(parents=True, exist_ok=True)
             print(f"Linking all targets for objdiff!")
             target = link_all_keep_relocatable(name, [t[1] for t in targets], objdiff_target_dir, ld)
+            target_path = (info.out_dir / 'objdiff_target' / f'{name}').relative_to(info.working_dir)
             if not target:
                 raise Exception("Objdiff generation fail! Target could not be linked")
             # objdiff unit
             objdiff_units.append({
                 "name": f'{name}',
-                "target_path": str(info.out_dir / 'objdiff_target' / f'{name}'),
-                "base_path": str(info.out_dir / 'objdiff_base' / f'{name}') if base else None
+                "target_path": str(target_path),
+                "base_path": str(base_path) if base else None
             })
 
         if info.args['recreate_binaries']:
