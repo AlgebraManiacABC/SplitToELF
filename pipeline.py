@@ -211,7 +211,9 @@ def link_all(name: str, to_link: list[Path], out_dir: Path, ld: str, info) -> Pa
     return linked
 
 
-def link_all_keep_relocatable(name: str, to_link: list[Path], out_dir: Path, ld: str) -> Path:
+def link_all_keep_relocatable(name: str, to_link: list[Path], out_dir: Path, ld: str) -> Path | None:
+    if not to_link:
+        return None
     response_file = out_dir / f'{name}.txt'
     linked = out_dir / f'{name}_linked'
     response_file.write_text('\n'.join(str(o).replace('\\','/') for o in to_link))
