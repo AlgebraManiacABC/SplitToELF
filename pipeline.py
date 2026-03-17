@@ -40,7 +40,7 @@ def compile_sources(name: str, info, objcopy):
                        progress_reports: bool, verbose: bool) -> tuple[bool, Path]:
         nonlocal completed_count
         # Double check we even *need* to compile (is object file newer than .c?)
-        if o_path.stat().st_mtime > c_path.stat().st_mtime:
+        if o_path.exists() and o_path.stat().st_mtime > c_path.stat().st_mtime:
             return True, o_path
         cmd = [cc, *flags, str(c_path), '-c', '-o', str(o_path)]
         if verbose:
