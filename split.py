@@ -108,13 +108,13 @@ def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol], 
         splat.append((sym.addr, o_file))
 
 
-    print(f'Total binary size: {bin_size} (0x{bin_size:x})')
+    # print(f'Total binary size: {bin_size} (0x{bin_size:x})')
     total_bin_data = sum([len(o.data) for o in all_o])
-    print(f'Total binary size from split objects: {total_bin_data} (0x{total_bin_data:x})')
-    print(f'Total binary size from symbols (named): {total_symbol_size["named"]} (0x{total_symbol_size["named"]:x})')
-    print(f'Total binary size from symbols (gaps): {total_symbol_size["inter"]} (0x{total_symbol_size["inter"]:x})')
+    # print(f'Total binary size from split objects: {total_bin_data} (0x{total_bin_data:x})')
+    # print(f'Total binary size from symbols (named): {total_symbol_size["named"]} (0x{total_symbol_size["named"]:x})')
+    # print(f'Total binary size from symbols (gaps): {total_symbol_size["inter"]} (0x{total_symbol_size["inter"]:x})')
     total_symbol_size = total_symbol_size['named'] + total_symbol_size['inter']
-    print(f'Total binary size from symbols (all): {total_symbol_size} (0x{total_symbol_size:x})')
+    # print(f'Total binary size from symbols (all): {total_symbol_size} (0x{total_symbol_size:x})')
     if total_bin_data != bin_size or bin_size != total_symbol_size:
         raise Exception(f"Mismatch in binary data! Expected {bin_size}, got {total_bin_data} and {total_symbol_size}!")
 
