@@ -14,11 +14,20 @@ def compile_sources(name: str, info, objcopy):
     build_dir = info.build_dir / name
     src_dir = info.working_dir / 'src' / name
     to_compile: list[Path] = info.sources.get(name, [])
+    # Detect and prevent duplicates
+    seen = {}
+    duplicates = []
+    for c in to_compile:
+        if c.name in seen:
+            duplicates.append(c)
+            duplicates.append(seen[c.name])
+        else:
+            seen[c.name] = c
+    if duplicates:
+        dupes = '\n'.join([str(d) for d in duplicates])
+        raise Exception(f"Error compiling: Cannot compile duplicate functions!:\n{dupes}")
     compiled = []
     default = info.cc_info.get('default', None)
-    ignore_list_raw = info.cc_info.get(name, {}).get('ignored', [])
-    ignore_list = []
-    # print(f"Source directory: {src_dir}")
     errored = []
     num_to_compile = len(to_compile)
     print(f"Compiling {num_to_compile} files!")
