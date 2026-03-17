@@ -259,6 +259,13 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
         default=False,
         help="Attempt to link objects and recreate original binaries"
     )
+    # Objdiff
+    parser.add_argument(
+        "--objdiff",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Whether to generate objdiff.json (will need to link all compiled and split objects!)"
+    )
 
     args = parser.parse_args(argv[1:])
 

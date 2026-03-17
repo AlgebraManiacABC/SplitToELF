@@ -103,8 +103,8 @@ def generate_module_objdiff_unit(name: str, to_link: list[Path], info: CTRPipeli
     objdiff_to_link = [obj for obj in to_link if obj in compiled]
     objdiff_dict = {
         "name": f'{name}',
-        "target_path": info.out_dir / name,
-        "base_path": info.out_dir / 'objdiff' / name
+        "target_path": str(info.out_dir / 'objdiff_target' / f'{name}'),
+        "base_path": str(info.out_dir / 'objdiff_base' / f'{name}')
     }
     return objdiff_dict, objdiff_to_link
 
@@ -118,10 +118,7 @@ def generate_function_objdiff_units(name: str, info: CTRPipelineInfo, compiled: 
     to_link = []
     sorted_targets = sorted(target_dict.items())
     t_addrs_merged = []
-    num_targets = len(sorted_targets)
     for i, t_info in enumerate(sorted_targets):
-        if info.args['progress_reports'] and (i / num_targets) % 100 == 0:
-            print(f"[OBJDIFF PROGRESS] {i / num_targets}%")
         t_addr, t_path = t_info
         if t_addr in t_addrs_merged:
             continue
@@ -166,8 +163,6 @@ def generate_function_objdiff_units(name: str, info: CTRPipelineInfo, compiled: 
         })
     for base_path in compiled_dict.values():
         print(f"Mismatching filename not found in target: {base_path}")
-    if info.args['progress_reports']:
-        print('[OBJDIFF PROGRESS] 100.0%')
     return objdiff_units, to_link
 
 LD_FLAGS = ['--entry=0', '--no-warn-mismatch']
@@ -215,7 +210,7 @@ def link_all_keep_relocatable(name: str, to_link: list[Path], out_dir: Path, ld:
     if not to_link:
         return None
     response_file = out_dir / f'{name}.txt'
-    linked = out_dir / f'{name}_linked'
+    linked = out_dir / f'{name}'
     response_file.write_text('\n'.join(str(o).replace('\\','/') for o in to_link))
     cmd = [ld, '--entry=0', '--no-warn-mismatch', '-r',
            f'@{response_file}', '-o', str(linked)]

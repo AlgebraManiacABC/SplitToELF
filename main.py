@@ -51,23 +51,33 @@ def main(argv: list[str]) -> int:
             compiled = list((info.build_dir / name).rglob('*.o'))
 
         # Generate objdiff json units
-        print("Preparing to link!")
+        print("Generating function objdiff units and preparing to link!")
         if not info.args['use_splits_only']:
             _, to_link = generate_function_objdiff_units(name, info, compiled, targets)
         else:
             to_link = [t[1] for t in targets]
 
         # Disregard function-wise units and instead use module units:
+        print("Generating module objdiff units!")
         unit, objdiff_to_link = generate_module_objdiff_unit(name, to_link, info, compiled)
-        objdiff_units += unit
+        objdiff_units.append(unit)
+
+        if info.args['objdiff']:
+            # Base
+            objdiff_base_dir = info.out_dir / 'objdiff_base'
+            objdiff_base_dir.mkdir(parents=True, exist_ok=True)
+            print(f"Linking all bases for objdiff!")
+            link_all_keep_relocatable(name, objdiff_to_link, objdiff_base_dir, ld)
+            # Target
+            objdiff_target_dir = info.out_dir / 'objdiff_target'
+            objdiff_target_dir.mkdir(parents=True, exist_ok=True)
+            print(f"Linking all targets for objdiff!")
+            link_all_keep_relocatable(name, [t[1] for t in targets], objdiff_target_dir, ld)
 
         if info.args['recreate_binaries']:
             # Link
             # linked = link_by_seriatum(name, to_link, info.out_dir, ld, False, info)
             linked = link_all(name, to_link, info.out_dir, ld, info)
-            objdiff_dir = info.out_dir / 'objdiff'
-            objdiff_dir.mkdir(parents=True, exist_ok=True)
-            objdiff_linked = link_all_keep_relocatable(name, objdiff_to_link, objdiff_dir, ld)
 
             # Objcopy
             final_binary = recreate_binary(name, info.out_dir, objcopy, linked, info.binaries[name])
@@ -85,7 +95,7 @@ def main(argv: list[str]) -> int:
             if info.args['progress_reports']:
                 print(f"OBJECT CREATION COMPLETE FOR {name.upper()}!!")
 
-    if info.args['recreate_binaries']:
+    if info.args['objdiff']:
         objdiff = {
             "$schema": "https://raw.githubusercontent.com/encounter/objdiff/main/config.schema.json",
             "build_target": False,
