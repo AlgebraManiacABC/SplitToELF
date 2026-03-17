@@ -57,22 +57,26 @@ def main(argv: list[str]) -> int:
         else:
             to_link = [t[1] for t in targets]
 
-        # Disregard function-wise units and instead use module units:
-        print("Generating module objdiff units!")
-        unit, objdiff_to_link = generate_module_objdiff_unit(name, to_link, info, compiled)
-        objdiff_units.append(unit)
-
         if info.args['objdiff']:
             # Base
+            objdiff_to_link = [obj for obj in to_link if obj in compiled]
             objdiff_base_dir = info.out_dir / 'objdiff_base'
             objdiff_base_dir.mkdir(parents=True, exist_ok=True)
             print(f"Linking all bases for objdiff!")
-            link_all_keep_relocatable(name, objdiff_to_link, objdiff_base_dir, ld)
+            base = link_all_keep_relocatable(name, objdiff_to_link, objdiff_base_dir, ld)
             # Target
             objdiff_target_dir = info.out_dir / 'objdiff_target'
             objdiff_target_dir.mkdir(parents=True, exist_ok=True)
             print(f"Linking all targets for objdiff!")
-            link_all_keep_relocatable(name, [t[1] for t in targets], objdiff_target_dir, ld)
+            target = link_all_keep_relocatable(name, [t[1] for t in targets], objdiff_target_dir, ld)
+            if not target:
+                raise Exception("Objdiff generation fail! Target could not be linked")
+            # objdiff unit
+            objdiff_units.append({
+                "name": f'{name}',
+                "target_path": str(info.out_dir / 'objdiff_target' / f'{name}'),
+                "base_path": str(info.out_dir / 'objdiff_base' / f'{name}') if base else None
+            })
 
         if info.args['recreate_binaries']:
             # Link
