@@ -168,7 +168,7 @@ def generate_function_objdiff_units(name: str, info: CTRPipelineInfo, compiled: 
         print(f"Mismatching filename not found in target: {base_path}")
     return objdiff_units, to_link
 
-LD_FLAGS = ['--entry=0', '--no-warn-mismatch']
+LD_FLAGS = ['--entry=0', '--no-warn-mismatch', '-T', str(Path(__file__).parent / 'linker.ld')]
 
 def link_by_seriatum(name: str, to_link: list[Path], out_dir: Path, ld: str, verbose: bool, info) -> Path:
     # Link (in groups of files, so we can see progress)
