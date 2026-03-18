@@ -20,11 +20,12 @@ def subp_run(cmd: list[str], print_cmd: bool, on_fail: str = "Error!") -> None:
 
 
 class Symbol:
-    def __init__(self, addr: int, name: str, mode: str, size: int):
+    def __init__(self, addr: int, name: str, mode: str, size: int, segment: str):
         self.addr = addr
         self.name = name
         self.mode = mode
         self.size = size
+        self.segment = segment
 
 
 class BinaryReader:
@@ -210,4 +211,4 @@ def pad_to_4(writer: BinaryWriter):
 
 
 def sanitize(name: str) -> str:
-    return re.sub(r'[<>:"/\\|?*]', '_', name)
+    return re.sub(r'[<>:"/\\|?*`()\']', '_', name)

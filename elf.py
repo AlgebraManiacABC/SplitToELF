@@ -144,13 +144,27 @@ class SectionHeaderType(IntEnum):
     SHT_DYNSYM = 11
 
 
+class SectionHeaderFlags(IntEnum):
+    SHF_WRITE = 0x1
+    SHF_ALLOC = 0x2
+    SHF_EXECINSTR = 0x4
+    SHF_MERGE = 0x10
+    SHF_STRINGS = 0x20
+    SHF_INFO_LINK = 0x40
+    SHF_LINK_ORDER = 0x80
+    SHF_OS_NONCONFORMING = 0x100
+    SHF_GROUP = 0x200
+    SHF_TLS = 0x400
+
+
 class ELF:
-    def __init__(self, header: ELFHeader, data: bytes, data_off: int, mask: Bitmask,
-                 imported: list[str], strtab_bytes: bytes,
+    def __init__(self, header: ELFHeader, data: bytes, data_off: int, segment: str,
+                 mask: Bitmask, imported: list[str], strtab_bytes: bytes,
                  local_syms: list[SymbolTableEntry], global_syms: list[SymbolTableEntry]):
         self.header = header
         self.data = data
         self.data_off = data_off
+        self.segment = segment
         self.mask = mask
         self.imported_symbols = imported
         self.strtab_bytes = strtab_bytes
@@ -162,7 +176,7 @@ class ELF:
     def from_reader(cls, reader: BinaryReader) -> "ELF":
         header = ELFHeader.from_reader(reader)
         if not header.valid:
-            return cls(header, b'\x00', 0, Bitmask(0), [], b'\x00', [], [])
+            return cls(header, b'\x00', 0, '', Bitmask(0), [], b'\x00', [], [])
         sh_entries = []
         text_data = []
         data_off = 0
@@ -238,7 +252,7 @@ class ELF:
                     undefined_symbols.append(rel_name)
                     mask.add_relocation(rel_entry)
 
-        return cls(header, bin_bytes, data_off, mask, undefined_symbols, strings, local_syms, global_syms)
+        return cls(header, bin_bytes, data_off, '.text', mask, undefined_symbols, strings, local_syms, global_syms)
 
     @classmethod
     def from_path(cls, path: Path) -> "ELF":
@@ -252,6 +266,9 @@ class ELF:
         global_strtab = bytearray()
         local_syms = []
         global_syms: list[SymbolTableEntry] = []
+        segment = '.text'
+        if sym_list:
+            segment = sym_list[0].segment
         for sym in sym_list:
             if sym.addr < data_off or sym.addr >= data_off + len(b):
                 continue
@@ -264,7 +281,7 @@ class ELF:
         for g_sym in global_syms:
             g_sym.name_off += len(local_strtab)
         strtab_bytes = local_strtab + global_strtab
-        return cls(header, b, data_off, mask, [], strtab_bytes, local_syms, global_syms)
+        return cls(header, b, data_off, segment, mask, [], strtab_bytes, local_syms, global_syms)
 
     @classmethod
     def from_bytes_single(cls, b: bytes, symbol: Symbol) -> "ELF":
@@ -278,7 +295,7 @@ class ELF:
                 0, len(b), 0x12, 0, 1)]
         global_strtab += symbol.name.encode('utf-8') + b'\x00'
         strtab_bytes = local_strtab + global_strtab
-        return cls(header, b, symbol.addr, Bitmask(len(b)), [], strtab_bytes, local_syms, global_syms)
+        return cls(header, b, symbol.addr, symbol.segment, Bitmask(len(b)), [], strtab_bytes, local_syms, global_syms)
 
     def write(self, o_file: Path):
         writer = BinaryWriter()
@@ -301,7 +318,7 @@ class ELF:
         shstrtab_off = writer.tell()
         writer.write_u8(0)
         text_name_off = writer.tell() - shstrtab_off
-        writer.write_str('.text')
+        writer.write_str(self.segment)
         symtab_name_off = writer.tell() - shstrtab_off
         if self.global_syms or self.local_syms:
             writer.write_str('.symtab')
@@ -315,7 +332,23 @@ class ELF:
         sh_off = writer.tell()
         SectionHeaderEntry(0, 0, 0, 0, 0,
                            0, 0, 0, 0, 0).write(writer)
-        SectionHeaderEntry(text_name_off, SectionHeaderType.SHT_PROGBITS, 0x6, 0, text_off,
+        match self.segment:
+            case '.text':
+                sh_type = SectionHeaderType.SHT_PROGBITS
+                sh_flags = SectionHeaderFlags.SHF_ALLOC | SectionHeaderFlags.SHF_EXECINSTR
+            case '.rodata':
+                sh_type = SectionHeaderType.SHT_PROGBITS
+                sh_flags = SectionHeaderFlags.SHF_ALLOC
+            case '.data':
+                sh_type = SectionHeaderType.SHT_PROGBITS
+                sh_flags = SectionHeaderFlags.SHF_ALLOC | SectionHeaderFlags.SHF_WRITE
+            case '.bss':
+                sh_type = SectionHeaderType.SHT_NOBITS
+                sh_flags = SectionHeaderFlags.SHF_ALLOC | SectionHeaderFlags.SHF_WRITE
+            case _:
+                sh_type = SectionHeaderType.SHT_PROGBITS
+                sh_flags = SectionHeaderFlags.SHF_ALLOC
+        SectionHeaderEntry(text_name_off, sh_type, sh_flags, 0, text_off,
                            len(self.data), 0, 0, 0, 1).write(writer)
         if self.global_syms or self.local_syms:
             SectionHeaderEntry(symtab_name_off, SectionHeaderType.SHT_SYMTAB, 0, 0, symtab_off,
@@ -361,7 +394,7 @@ class ELF:
         new_strtab_bytes = self.strtab_bytes + other.strtab_bytes
         new_imported_symbols = self.imported_symbols + other.imported_symbols
         new_header = self.header.copy()
-        return ELF(new_header, new_data, self.data_off, new_mask, new_imported_symbols, new_strtab_bytes, new_local_syms, new_global_syms)
+        return ELF(new_header, new_data, self.data_off, self.segment, new_mask, new_imported_symbols, new_strtab_bytes, new_local_syms, new_global_syms)
 
     def __iadd__(self, other):
         data_size = len(self.data)

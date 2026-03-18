@@ -64,6 +64,7 @@ def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol], 
     all_o = []
     total_symbol_size = {'inter': 0, 'named': 0}
     cur_addr = 0
+    last_segment = '.text'
 
     while addrs or cur_addr < bin_size:
 
@@ -74,7 +75,7 @@ def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol], 
             # Fully finished, yet there are still trailing bytes
             sym_name = f'{cur_addr:08x}'
             symbol_bytes = bin_data[cur_addr:]
-            sym = Symbol(cur_addr, sym_name, '$d', bin_size - cur_addr)
+            sym = Symbol(cur_addr, sym_name, '$d', bin_size - cur_addr, last_segment)
             total_symbol_size['inter'] += sym.size
             cur_addr += sym.size
         elif cur_addr == addrs[0]:
@@ -86,7 +87,8 @@ def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol], 
             if cur_addr + sym_size > next_addr:
                 sym_size = next_addr - cur_addr
             symbol_bytes = bin_data[sym.addr:sym.addr+sym_size]
-            sym = Symbol(cur_addr, sym_name, sym.mode, sym_size)
+            sym = Symbol(cur_addr, sym_name, sym.mode, sym_size, sym.segment)
+            last_segment = sym.segment
             cur_addr += sym.size
             total_symbol_size['named'] += sym.size
             addrs.pop(0)  # Remove the address after processing
@@ -94,7 +96,7 @@ def split_by_symbols(binary: CTRBinary, split_dir: Path, symbols: list[Symbol], 
             # Current address needs to keep up! This is safe to treat as data.
             sym_name = f'{cur_addr:08x}'
             symbol_bytes = bin_data[cur_addr:addrs[0]]
-            sym = Symbol(cur_addr, sym_name, "$d", addrs[0] - cur_addr)
+            sym = Symbol(cur_addr, sym_name, "$d", addrs[0] - cur_addr, last_segment)
             cur_addr = addrs[0]
             total_symbol_size['inter'] += sym.size
         else: # cur_addr > addrs[0]
@@ -175,7 +177,7 @@ def split(binary: CTRBinary, compiled_objects: list[Path], build_dir: Path, symb
     for start_end in to_objectify:
         base_name = f'{start_end[0] + binary.base_addr:08x}'
         o_file = build_dir / f'{base_name}.o'
-        symbols_in_range = [Symbol(sym.addr - start_end[0], sym.name, sym.mode, sym.size)
+        symbols_in_range = [Symbol(sym.addr - start_end[0], sym.name, sym.mode, sym.size, sym.segment)
                      for sym in symbols if start_end[0] <= sym.addr < start_end[1]]
         o = ELF.from_bytes_multi(binary_bytes[start_end[0]:start_end[1]+1], start_end[0],
                            symbols_in_range)
