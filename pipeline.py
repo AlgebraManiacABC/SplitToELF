@@ -36,10 +36,10 @@ def compile_sources(name: str, info, objcopy):
 
     def compile_source(c_path: Path, o_path: Path, cc: str,
                        flags: list[str], ignore_compiler_errors: bool,
-                       progress_reports: bool, verbose: bool) -> tuple[bool, Path]:
+                       progress_reports: bool, verbose: bool, force: bool) -> tuple[bool, Path]:
         nonlocal completed_count
         # Double check we even *need* to compile (is object file newer than .c?)
-        if o_path.exists() and o_path.stat().st_mtime > c_path.stat().st_mtime:
+        if not force and o_path.exists() and o_path.stat().st_mtime > c_path.stat().st_mtime:
             return True, o_path
         cmd = [cc, *flags, str(c_path), '-c', '-o', str(o_path)]
         if verbose:
@@ -63,6 +63,7 @@ def compile_sources(name: str, info, objcopy):
 
     with ThreadPoolExecutor() as executor:
         build_dir.mkdir(parents=True, exist_ok=True)
+        force = any([c.stat().st_mtime < (info.working_dir / 'cc.yaml').stat().st_mtime for c in to_compile])
         for c in to_compile:
             bld = info.build_dir / name / (c.stem + '.o')
             d = info.cc_info[name].get(c.name, None)
@@ -74,7 +75,8 @@ def compile_sources(name: str, info, objcopy):
                 executor.submit(compile_source, c, bld, str(cc), flags,
                                 info.args['ignore_compiler_errors'],
                                 info.args['progress_reports'],
-                                info.args['verbose_compilation'])
+                                info.args['verbose_compilation'],
+                                force)
             )
 
     for f in compile_futures:
