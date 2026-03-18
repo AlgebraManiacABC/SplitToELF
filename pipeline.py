@@ -12,7 +12,6 @@ from util import subp_run, BinaryWriter, EXIT_SUCCESS, Symbol
 def compile_sources(name: str, info, objcopy):
     # Compile
     build_dir = info.build_dir / name
-    src_dir = info.working_dir / 'src' / name
     to_compile: list[Path] = info.sources.get(name, [])
     # Detect and prevent duplicates
     seen = {}
@@ -44,11 +43,13 @@ def compile_sources(name: str, info, objcopy):
             return True, o_path
         cmd = [cc, *flags, str(c_path), '-c', '-o', str(o_path)]
         if verbose:
-            print(" ".join(cmd))
+            with lock:
+                print(" ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != EXIT_SUCCESS:
             if ignore_compiler_errors:
-                print(f"Error compiling {c_path}! Skipping!")
+                with lock:
+                    print(f"Error compiling {c_path}! Skipping!")
                 ret = False, c_path
             else:
                 raise Exception(f"Compiler error!\nstdout:\n{result.stdout}\n\nstderr:\n{result.stderr}")

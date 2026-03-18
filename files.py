@@ -1,4 +1,5 @@
 import csv
+import fnmatch
 from pathlib import Path
 import argparse
 import yaml
@@ -55,7 +56,7 @@ def gather_symbols(sym_path: Path) -> list[Symbol]:
     reader = csv.DictReader(sym_path.read_text().splitlines())
     for line in reader:
         try:
-            symbols.append(Symbol(int(line["Location"], 16), line["Name"], line["Mode"], int(line["Size"], 16)))
+            symbols.append(Symbol(int(line["Location"], 16), line["Name"], line["Mode"], int(line["Size"], 16), line["Segment"]))
         except ValueError:
             pass
 
@@ -129,7 +130,7 @@ class CTRPipelineInfo:
             raise Exception(e)
         exh, binaries = gather_binaries(orig_dir, args['single_binary'])
         cc_info = yaml.safe_load(cc_info_path.read_text())
-        cc_info = resolve_presets(cc_info)
+        cc_info = resolve_cc_info(cc_info, working_dir / 'src')
         sources = gather_sources(source_dir, cc_info, args['single_binary'])
         symbols: dict[str, list[Symbol]] = dict()
         for f in sym_dir.iterdir():
@@ -143,7 +144,7 @@ class CTRPipelineInfo:
                    out_dir, tool_dir, symbols, cc_info, args)
 
 
-def resolve_presets(cc_info: dict) -> dict:
+def resolve_cc_info(cc_info: dict, src_dir: Path) -> dict:
     """
     Resolve preset definitions in cc.yaml.
 
@@ -160,29 +161,66 @@ def resolve_presets(cc_info: dict) -> dict:
               - FUN_00100794.c
               - FUN_001013c4.c
 
-    This expands into per-file entries as if each file had been written out
-    individually with the preset's cc/flags.
+    Wildcard patterns are also supported for per-file entries:
+        code.bin:
+          GameWork*.cpp:
+            cc: armcc
+            flags: [-Iinclude]
+
+    Wildcards are expanded against all explicitly listed filenames in the
+    binary's dict (i.e. they match keys already present, not the filesystem).
+    Presets are similarly expanded. Both are skipped if a file already has an
+    explicit per-file entry, so explicit entries always win.
     - Claude Cowork, Opus 4.6
+    - Updated by Claude Sonnet 4.6
     """
     preset_defs = cc_info.pop('presets', {})
-    if not preset_defs:
-        return cc_info
 
     for binary_name, binary_dict in cc_info.items():
         if binary_name == 'default' or not isinstance(binary_dict, dict):
             continue
+
+        # --- 1. Expand preset blocks ---
         file_presets = binary_dict.pop('presets', None)
-        if not file_presets:
+        if file_presets:
+            for preset_name, file_list in file_presets.items():
+                preset: dict = preset_defs.get(preset_name)
+                if not preset:
+                    raise ValueError(
+                        f"Preset '{preset_name}' used in '{binary_name}' "
+                        f"but not defined in top-level 'presets'!"
+                    )
+                if not isinstance(file_list, list):
+                    raise ValueError(
+                        f"Preset '{preset_name}' in '{binary_name}' "
+                        f"must map to a list of filenames!"
+                    )
+                for filename in file_list:
+                    if filename not in binary_dict:
+                        binary_dict[filename] = preset
+
+        # --- 2. Expand wildcard keys ---
+        wildcard_keys = [k for k in binary_dict if any(c in k for c in ('*', '?', '['))]
+        if not wildcard_keys:
             continue
-        for preset_name, file_list in file_presets.items():
-            preset: dict = preset_defs.get(preset_name)
-            if not preset:
-                raise Exception(f"Preset '{preset_name}' used in '{binary_name}' but not defined in top-level 'presets'!")
-            if not isinstance(file_list, list):
-                raise Exception(f"Preset '{preset_name}' in '{binary_name}' must map to a list of filenames!")
-            for filename in file_list:
-                if filename not in binary_dict:
-                    binary_dict[filename] = preset
+
+        binary_src_dir = src_dir / binary_name
+        if not binary_src_dir.is_dir():
+            raise ValueError(f"Source directory '{binary_src_dir}' not found for wildcard expansion!")
+
+        # Collect all filenames (not paths) from src/<binary_name>/ recursively
+        src_filenames = [f.name for f in binary_src_dir.rglob('*') if f.is_file()]
+
+        for pattern in wildcard_keys:
+            entry = binary_dict.pop(pattern)
+            if not isinstance(entry, dict):
+                raise ValueError(
+                    f"Wildcard pattern '{pattern}' in '{binary_name}' "
+                    f"must map to a compiler config dict!"
+                )
+            for filename in src_filenames:
+                if fnmatch.fnmatch(filename, pattern) and filename not in binary_dict:
+                    binary_dict[filename] = entry
 
     return cc_info
 
