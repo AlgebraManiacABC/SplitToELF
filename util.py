@@ -29,12 +29,13 @@ class Symbol:
 
 
 class BinaryReader:
-    def __init__(self, data: bytes):
+    def __init__(self, name: str, data: bytes):
         self._stream = BytesIO(data)
+        self.name = name
 
     @classmethod
     def from_path(cls, path: Path) -> "BinaryReader":
-        return cls(path.read_bytes())
+        return cls(path.name, path.read_bytes())
 
     def seek(self, offset: int):
         self._stream.seek(offset)
