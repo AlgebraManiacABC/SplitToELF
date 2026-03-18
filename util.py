@@ -4,6 +4,7 @@ import subprocess
 from enum import IntEnum
 from io import BytesIO
 from pathlib import Path
+from subprocess import CompletedProcess
 from typing import Protocol
 
 
@@ -11,12 +12,13 @@ EXIT_SUCCESS=0
 EXIT_FAILURE=1
 
 
-def subp_run(cmd: list[str], print_cmd: bool, on_fail: str = "Error!") -> None:
+def subp_run(cmd: list[str], print_cmd: bool, on_fail: str = "Error!") -> CompletedProcess[str]:
     if print_cmd:
         print(" ".join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != EXIT_SUCCESS:
         raise Exception(f"{on_fail}\nstdout:\n{result.stdout}\n\nstderr:\n{result.stderr}")
+    return result
 
 
 class Symbol:
