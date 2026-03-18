@@ -221,18 +221,19 @@ class ELF:
             reader.seek(sh_str.off)
             strings = reader.read_bytes(sh_str.size)
 
-        # Only keep .text
+        # Only keep .text, .rodata, .data, .bss
         sh_shstrtab = sh_entries[header.shstrndx]
         reader.seek(sh_shstrtab.off)
         shstrs = reader.read_bytes(sh_shstrtab.size)
         bin_bytes = None
         for off in text_name_offsets:
             name = get_name(shstrs, off)
-            if name == '.text':
+            if name in ['.text','.rodata','.data','.bss']:
+                sh_type = name
                 bin_bytes = text_data[text_name_offsets.index(off)]
-                break
+                break #Still assuming ony one section...
         if not bin_bytes:
-            raise Exception(f"No .text section in this object!")
+            raise Exception(f"No valid section in {reader.name}!")
 
         # Handle relocations
         mask = Bitmask(len(bin_bytes))
@@ -252,7 +253,7 @@ class ELF:
                     undefined_symbols.append(rel_name)
                     mask.add_relocation(rel_entry)
 
-        return cls(header, bin_bytes, data_off, '.text', mask, undefined_symbols, strings, local_syms, global_syms)
+        return cls(header, bin_bytes, data_off, sh_type, mask, undefined_symbols, strings, local_syms, global_syms)
 
     @classmethod
     def from_path(cls, path: Path) -> "ELF":
