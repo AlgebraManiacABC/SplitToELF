@@ -40,6 +40,10 @@ def compile_sources(name: str, info, objcopy):
         nonlocal completed_count
         # Double check we even *need* to compile (is object file newer than .c?)
         if not force and o_path.exists() and o_path.stat().st_mtime > c_path.stat().st_mtime:
+            with lock:
+                completed_count += 1
+                if progress_reports and (completed_count % math.ceil(num_to_compile / 100)) == 0:
+                    print(f"[COMPILER PROGRESS] {100 * completed_count / num_to_compile:.1f}%")
             return True, o_path
         cmd = [cc, *flags, str(c_path), '-c', '-o', str(o_path)]
         if verbose:
@@ -54,6 +58,12 @@ def compile_sources(name: str, info, objcopy):
             else:
                 raise Exception(f"Compiler error!\nstdout:\n{result.stdout}\n\nstderr:\n{result.stderr}")
         else:
+            # objcopy (must specify outfile while multithreaded)
+            objcopy_out = o_path.parent / f'{o_path.name}.tmp'
+            cmd = [objcopy, f'--globalize-symbol={o_path.stem}',
+                   '--set-section-alignment', '.text=1', str(o_path), str(objcopy_out)]
+            subp_run(cmd, False, f"Objcopy error on {o_path}!")
+            o_path = objcopy_out.replace(o_path)
             ret = True, o_path
         with lock:
             completed_count += 1
@@ -79,13 +89,10 @@ def compile_sources(name: str, info, objcopy):
                                 force)
             )
 
-    for f in compile_futures:
-        ok, path = f.result()
+    results = [f.result() for f in compile_futures]
+    for i, result in enumerate(results):
+        ok, path = result
         if ok:
-            # Globalize the symbol and set .text alignment to 1 byte
-            cmd = [objcopy, f'--globalize-symbol={path.stem}',
-                   '--set-section-alignment', '.text=1', str(path)]
-            subp_run(cmd, False, f"Objcopy error on {path}!")
             compiled.append(path)
         else:
             errored.append(path)
