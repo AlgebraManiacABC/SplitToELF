@@ -59,7 +59,8 @@ def main(argv: list[str]) -> int:
 
         if info.args['objdiff']:
             # Base
-            objdiff_to_link = [obj for obj in to_link if obj in compiled]
+            compiled_set = set(compiled)
+            objdiff_to_link = [obj for obj in to_link if obj in compiled_set]
             objdiff_base_dir = info.out_dir / 'objdiff_base'
             objdiff_base_dir.mkdir(parents=True, exist_ok=True)
             print(f"Linking all bases for objdiff!")

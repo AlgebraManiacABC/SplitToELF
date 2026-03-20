@@ -146,33 +146,16 @@ class CTRPipelineInfo:
 
 def resolve_cc_info(cc_info: dict, src_dir: Path) -> dict:
     """
-    Resolve preset definitions in cc.yaml.
+    Resolve preset definitions and wildcard patterns in cc.yaml.
 
-    Top-level 'presets' key defines reusable compiler configurations:
-        presets:
-          thumb:
-            cc: armcc_4.1_1049
-            flags: [--thumb]
+    Glob patterns (in presets, ignored, and per-file wildcard keys) are expanded
+    against the filesystem under src/<binary_name>/. Explicit per-file entries
+    always take priority, and ignored files are excluded from expansion.
 
-    Under each binary, a 'presets' key maps preset names to file lists:
-        code.bin:
-          presets:
-            thumb:
-              - FUN_00100794.c
-              - FUN_001013c4.c
+    The 'ignored' key is preserved in the output so downstream code
+    (e.g. gather_sources) can use it for file discovery filtering.
 
-    Wildcard patterns are also supported for per-file entries:
-        code.bin:
-          GameWork*.cpp:
-            cc: armcc
-            flags: [-Iinclude]
-
-    Wildcards are expanded against all explicitly listed filenames in the
-    binary's dict (i.e. they match keys already present, not the filesystem).
-    Presets are similarly expanded. Both are skipped if a file already has an
-    explicit per-file entry, so explicit entries always win.
-    - Claude Cowork, Opus 4.6
-    - Updated by Claude Sonnet 4.6
+     - Iterated upon by Claude Opus 4.6, Sonnet 4.6, Opus 4.6
     """
     preset_defs = cc_info.pop('presets', {})
 
@@ -180,47 +163,58 @@ def resolve_cc_info(cc_info: dict, src_dir: Path) -> dict:
         if binary_name == 'default' or not isinstance(binary_dict, dict):
             continue
 
-        # --- 1. Expand preset blocks ---
         file_presets = binary_dict.pop('presets', None)
-        if file_presets:
-            for preset_name, file_list in file_presets.items():
-                preset: dict = preset_defs.get(preset_name)
-                if not preset:
-                    raise ValueError(
-                        f"Preset '{preset_name}' used in '{binary_name}' "
-                        f"but not defined in top-level 'presets'!"
-                    )
-                if not isinstance(file_list, list):
-                    raise ValueError(
-                        f"Preset '{preset_name}' in '{binary_name}' "
-                        f"must map to a list of filenames!"
-                    )
-                for filename in file_list:
-                    if filename not in binary_dict:
-                        binary_dict[filename] = preset
+        ignored_patterns = binary_dict.get('ignored')  # preserve for downstream
 
-        # --- 2. Expand wildcard keys ---
-        wildcard_keys = [k for k in binary_dict if any(c in k for c in ('*', '?', '['))]
-        if not wildcard_keys:
+        wildcard_keys = [
+            k for k in binary_dict
+            if k != 'ignored' and any(c in k for c in '*?[')
+        ]
+        if not file_presets and not wildcard_keys:
             continue
 
         binary_src_dir = src_dir / binary_name
         if not binary_src_dir.is_dir():
-            raise ValueError(f"Source directory '{binary_src_dir}' not found for wildcard expansion!")
+            raise ValueError(f"Source directory '{binary_src_dir}' not found!")
 
-        # Collect all filenames (not paths) from src/<binary_name>/ recursively
-        src_filenames = [f.name for f in binary_src_dir.rglob('*') if f.is_file()]
+        src_files = [
+            f.relative_to(binary_src_dir).as_posix()
+            for f in binary_src_dir.rglob('*') if f.is_file()
+        ]
+
+        # Build ignored set for filtering expansions within this function
+        ignored: set[str] = set()
+        if ignored_patterns:
+            for pat in ignored_patterns:
+                ignored.update(f for f in src_files if fnmatch.fnmatch(f, pat))
+
+        # Unified expansion: presets + wildcard keys
+        expansions: list[tuple[str, dict]] = []
+
+        if file_presets:
+            for name, file_list in file_presets.items():
+                preset = preset_defs.get(name)
+                if not preset:
+                    raise ValueError(
+                        f"Preset '{name}' in '{binary_name}' not defined!"
+                    )
+                for entry in file_list:
+                    expansions.append((entry, preset))
 
         for pattern in wildcard_keys:
-            entry = binary_dict.pop(pattern)
-            if not isinstance(entry, dict):
-                raise ValueError(
-                    f"Wildcard pattern '{pattern}' in '{binary_name}' "
-                    f"must map to a compiler config dict!"
-                )
-            for filename in src_filenames:
-                if fnmatch.fnmatch(filename, pattern) and filename not in binary_dict:
-                    binary_dict[filename] = entry
+            expansions.append((pattern, binary_dict.pop(pattern)))
+
+        for pattern, config in expansions:
+            is_glob = any(c in pattern for c in '*?[')
+            if is_glob:
+                for match in src_files:
+                    if fnmatch.fnmatch(match, pattern) and match not in ignored:
+                        key = match.rsplit('/', 1)[-1]
+                        if key not in binary_dict:
+                            binary_dict[key] = config
+            else:
+                if pattern not in binary_dict and pattern not in ignored:
+                    binary_dict[pattern] = config
 
     return cc_info
 
