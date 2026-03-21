@@ -160,7 +160,8 @@ class SectionHeaderFlags(IntEnum):
 class ELF:
     def __init__(self, header: ELFHeader, data: bytes, data_off: int, segment: str,
                  mask: Bitmask, imported: list[str], strtab_bytes: bytes,
-                 local_syms: list[SymbolTableEntry], global_syms: list[SymbolTableEntry]):
+                 local_syms: list[SymbolTableEntry], global_syms: list[SymbolTableEntry],
+                 relocations: list[tuple[RelocationEntry, str]] = None):
         self.header = header
         self.data = data
         self.data_off = data_off
@@ -170,6 +171,7 @@ class ELF:
         self.strtab_bytes = strtab_bytes
         self.local_syms = local_syms
         self.global_syms = global_syms
+        self.relocations = relocations or []
         return
 
     @classmethod
@@ -238,6 +240,7 @@ class ELF:
         # Handle relocations
         mask = Bitmask(len(bin_bytes))
         undefined_symbols = []
+        relocations = []
         for i in rel_indices:
             sh_rel = sh_entries[i]
             sh_rel_name = get_name(shstrs, sh_rel.name_off)
@@ -252,8 +255,11 @@ class ELF:
                     # print(f"Name to relocate: {rel_name}")
                     undefined_symbols.append(rel_name)
                     mask.add_relocation(rel_entry)
+                    relocations.append((rel_entry, rel_name))
 
-        return cls(header, bin_bytes, data_off, sh_type, mask, undefined_symbols, strings, local_syms, global_syms)
+        return cls(header, bin_bytes, data_off, sh_type, mask,
+                   undefined_symbols, strings, local_syms, global_syms,
+                   relocations)
 
     @classmethod
     def from_path(cls, path: Path) -> "ELF":
@@ -273,11 +279,13 @@ class ELF:
         for sym in sym_list:
             if sym.addr < data_off or sym.addr >= data_off + len(b):
                 continue
+            sym_value = sym.addr - data_off
+            thumb = 1 if sym.mode == '$t' else 0
             local_syms.append(SymbolTableEntry(len(local_strtab),
-                sym.addr - data_off, 0, 0x0, 0x0, 1))
+                sym_value, 0, 0x0, 0x0, 1))
             local_strtab += sym.mode.encode('utf-8') + b'\x00'
             global_syms.append(SymbolTableEntry(len(global_strtab),
-                sym.addr - data_off, sym.size, 0x12, 0, 1))
+                sym_value | thumb, sym.size, 0x12, 0, 1))
             global_strtab += sym.name.encode('utf-8') + b'\x00'
         for g_sym in global_syms:
             g_sym.name_off += len(local_strtab)
@@ -292,8 +300,9 @@ class ELF:
         local_syms = [SymbolTableEntry(len(local_strtab),
                 0, 0, 0x0, 0x0, 1)]
         local_strtab += symbol.mode.encode('utf-8') + b'\x00'
+        thumb = 1 if symbol.mode == '$t' else 0
         global_syms: list[SymbolTableEntry] = [SymbolTableEntry(len(global_strtab) + len(local_strtab),
-                0, len(b), 0x12, 0, 1)]
+                thumb, len(b), 0x12, 0, 1)]
         global_strtab += symbol.name.encode('utf-8') + b'\x00'
         strtab_bytes = local_strtab + global_strtab
         return cls(header, b, symbol.addr, symbol.segment, Bitmask(len(b)), [], strtab_bytes, local_syms, global_syms)
@@ -367,6 +376,86 @@ class ELF:
         writer.write_u16(4 if self.global_syms or self.local_syms else 2) # shstrndx
 
         writer.flush(o_file)
+
+    def relocations_match(self, other: "ELF", sym_addrs: dict[str, int], other_addr: int) -> bool:
+        """
+        Check that each relocation targets the same address
+        as the resolved instruction in the other elf.
+        Important: "self" is expected to contain relocation entries, while "other" is not.
+         - Claude Opus 4.6
+        """
+        for rel_entry, sym_name in self.relocations:
+            off = rel_entry.off
+            rtype = rel_entry.type
+            sym_addr = sym_addrs.get(sym_name)
+            if sym_addr is None:
+                raise Exception(f"Symbol '{sym_name}' was not found in sym_addrs!")
+            match rtype:
+                case RelocationType.R_ARM_CALL | RelocationType.R_ARM_JUMP24:
+                    # Extract addend from compiled instruction
+                    compiled_instr = int.from_bytes(self.data[off:off + 4], 'little')
+                    compiled_imm24 = compiled_instr & 0x00FFFFFF
+                    if compiled_imm24 & 0x800000:
+                        compiled_imm24 -= 0x1000000
+                    A = compiled_imm24 << 2
+                    # Simulate linker: result = (S + A) - P
+                    result = (sym_addr + A) - (other_addr + off)
+                    expected_imm24 = (result >> 2) & 0x00FFFFFF
+                    # Read what the original binary has
+                    split_instr = int.from_bytes(other.data[off:off + 4], 'little')
+                    actual_imm24 = split_instr & 0x00FFFFFF
+                    if expected_imm24 != actual_imm24:
+                        return False
+                case RelocationType.R_ARM_THM_PC22:
+                    # Decode addend from compiled instruction
+                    hw1_c = int.from_bytes(self.data[off:off + 2], 'little')
+                    hw2_c = int.from_bytes(self.data[off + 2:off + 4], 'little')
+                    s = (hw1_c >> 10) & 1
+                    imm10 = hw1_c & 0x3FF
+                    j1 = (hw2_c >> 13) & 1
+                    j2 = (hw2_c >> 11) & 1
+                    imm11 = hw2_c & 0x7FF
+                    i1 = ~(j1 ^ s) & 1
+                    i2 = ~(j2 ^ s) & 1
+                    A = (s << 24) | (i1 << 23) | (i2 << 22) | (imm10 << 12) | (imm11 << 1)
+                    if s:
+                        A -= (1 << 25)
+                    # Expected target: sym + A + 4 (Thumb pipeline compensation)
+                    expected_target = sym_addr + A + 4
+
+                    # Decode actual target from split instruction
+                    hw1_s = int.from_bytes(other.data[off:off + 2], 'little')
+                    hw2_s = int.from_bytes(other.data[off + 2:off + 4], 'little')
+                    s = (hw1_s >> 10) & 1
+                    imm10 = hw1_s & 0x3FF
+                    j1 = (hw2_s >> 13) & 1
+                    is_blx = ((hw2_s >> 12) & 1) == 0
+                    j2 = (hw2_s >> 11) & 1
+                    imm11 = hw2_s & 0x7FF
+                    i1 = ~(j1 ^ s) & 1
+                    i2 = ~(j2 ^ s) & 1
+                    offset = (s << 24) | (i1 << 23) | (i2 << 22) | (imm10 << 12) | (imm11 << 1)
+                    if s:
+                        offset -= (1 << 25)
+                    P = other_addr + off
+                    if is_blx:
+                        actual_target = ((P + 4) & ~3) + offset  # Align(PC, 4)
+                    else:
+                        actual_target = (P + 4) + offset
+
+                    if expected_target != actual_target:
+                        return False
+                case RelocationType.R_ARM_ABS32 | RelocationType.R_ARM_TARGET1:
+                    # Addend is the existing 32-bit value
+                    A = int.from_bytes(self.data[off:off + 4], 'little')
+                    # Linker writes: S + A (absolute)
+                    expected_val = (sym_addr + A) & 0xFFFFFFFF
+                    actual_val = int.from_bytes(other.data[off:off + 4], 'little')
+                    if expected_val != actual_val:
+                        return False
+                case _:
+                    continue
+        return True
 
     def __add__(self, other: "ELF"):
         data_size = len(self.data)

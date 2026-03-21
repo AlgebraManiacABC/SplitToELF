@@ -125,6 +125,7 @@ def generate_function_objdiff_units(name: str, info: CTRPipelineInfo, compiled: 
     objdiff_units = []
     target_dict: dict[int, Path] = {addr: path for addr, path in targets}
     compiled_dict = {path.stem: path for path in compiled}
+    sym_addrs = {sym.name: sym.addr for sym in info.symbols[name]}
     to_link = []
     sorted_targets = sorted(target_dict.items())
     t_addrs_merged = []
@@ -147,18 +148,23 @@ def generate_function_objdiff_units(name: str, info: CTRPipelineInfo, compiled: 
                 i += 1
                 t_elf += ELF.from_path(t_path_2)
             if b_elf == t_elf:
-                to_link.append(o_file)
-                t_addrs_merged += t_addrs_to_merge
+                if b_elf.relocations_match(t_elf, sym_addrs, t_addr):
+                    to_link.append(o_file)
+                    t_addrs_merged += t_addrs_to_merge
+                else:
+                    print(f"Object file {o_file} contains incorrect relocations! "
+                          "Using split version instead!")
+                    to_link.append(t_path)
             elif t_addrs_to_merge:
                 print(f"Object file {o_file} (.text size {len(b_elf.data)}) was larger than"
                       f"{t_path} (.text size {t_elf_original_size}) and was compared with:")
                 for a in t_addrs_to_merge:
                     print(f" - {target_dict[a]}")
                 print(f"In order to create a new ELF with .text size {len(t_elf.data)}...")
-                print(f"And yet it was not equivalent! Using linked version instead.")
+                print(f"And yet it was not equivalent! Using split version instead.")
                 to_link.append(t_path)
             else:
-                print(f"Object file {o_file} did not match {t_path}! Using linked version instead.")
+                print(f"Object file {o_file} did not match {t_path}! Using split version instead.")
                 to_link.append(t_path)
         else:
             to_link.append(t_path)
@@ -175,7 +181,7 @@ def generate_function_objdiff_units(name: str, info: CTRPipelineInfo, compiled: 
         print(f"Mismatching filename not found in target: {base_path}")
     return objdiff_units, to_link
 
-LD_FLAGS = ['--entry=0', '--no-warn-mismatch', '-T', str(Path(__file__).parent / 'linker.ld')]
+LD_FLAGS = ['--entry=0', '--no-warn-mismatch', '-T', str(Path(__file__).parent / 'linker.ld'), '--use-blx']
 
 def link_by_seriatum(name: str, to_link: list[Path], out_dir: Path, ld: str, verbose: bool, info) -> Path:
     # Link (in groups of files, so we can see progress)
@@ -186,7 +192,7 @@ def link_by_seriatum(name: str, to_link: list[Path], out_dir: Path, ld: str, ver
     for i, bounds in enumerate(link_bounds):
         linked = out_dir / f'{name}_linked_{bounds[0]}'
         response_file.write_text('\n'.join('"' + str(o).replace('\\', '/') + '"' for o in to_link[bounds[0]:bounds[1]]))
-        cmd = [ld, *LD_FLAGS, '-r', f'@{response_file}', '-o', str(linked)]
+        cmd = [ld, '--entry=0', '--no-warn-mismatch', '-r', f'@{response_file}', '-o', str(linked)]
         if info.args['progress_reports'] and (i % math.ceil(len(link_bounds)/100)) == 0:
             print(f"[LINKER PROGRESS] {link_by * i / len(link_bounds):.1f}%")
         subp_run(cmd, verbose, "Linker error!")
