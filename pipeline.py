@@ -148,13 +148,16 @@ def generate_function_objdiff_units(name: str, info: CTRPipelineInfo, compiled: 
                 i += 1
                 t_elf += ELF.from_path(t_path_2)
             if b_elf == t_elf:
-                if b_elf.relocations_match(t_elf, sym_addrs, t_addr):
-                    to_link.append(o_file)
-                    t_addrs_merged += t_addrs_to_merge
-                else:
-                    print(f"Object file {o_file} contains incorrect relocations! "
-                          "Using split version instead!")
-                    to_link.append(t_path)
+                try:
+                    if b_elf.relocations_match(t_elf, sym_addrs, t_addr):
+                        to_link.append(o_file)
+                        t_addrs_merged += t_addrs_to_merge
+                    else:
+                        print(f"Object file {o_file} contains incorrect relocations! "
+                              "Using split version instead!")
+                        to_link.append(t_path)
+                except Exception as e:
+                    raise Exception(f"Exception in {o_file}: {e}")
             elif t_addrs_to_merge:
                 print(f"Object file {o_file} (.text size {len(b_elf.data)}) was larger than"
                       f"{t_path} (.text size {t_elf_original_size}) and was compared with:")

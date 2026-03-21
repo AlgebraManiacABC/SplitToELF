@@ -389,7 +389,7 @@ class ELF:
             rtype = rel_entry.type
             sym_addr = sym_addrs.get(sym_name)
             if sym_addr is None:
-                raise Exception(f"Symbol '{sym_name}' was not found in sym_addrs!")
+                raise Exception(f"Symbol '{sym_name}' (From {other_addr:08x}) was not found in sym_addrs!")
             match rtype:
                 case RelocationType.R_ARM_CALL | RelocationType.R_ARM_JUMP24:
                     # Extract addend from compiled instruction
