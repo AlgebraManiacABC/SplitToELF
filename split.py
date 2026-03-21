@@ -18,9 +18,11 @@ def gather_splits(binary: CTRBinary, split_dir: Path, symbols: list[Symbol]):
             # Fully finished, yet there are still trailing bytes
             sym_name = f'{cur_addr:08x}'
             sym_size = bin_size - cur_addr
+            start_addr = cur_addr
             cur_addr += sym_size
         elif cur_addr == addrs[0]:
             # We reached a symbol definition; split it!
+            start_addr = cur_addr
             sym = symbol_dict[cur_addr]
             sym_name = sanitize(sym.name)
             sym_size = sym.size
@@ -32,6 +34,7 @@ def gather_splits(binary: CTRBinary, split_dir: Path, symbols: list[Symbol]):
         elif cur_addr < addrs[0]:
             # Current address needs to keep up! This is safe to treat as data.
             sym_name = f'{cur_addr:08x}'
+            start_addr = cur_addr
             cur_addr = addrs[0]
         else: # cur_addr > addrs[0]
             # This should be impossible!!
@@ -40,7 +43,7 @@ def gather_splits(binary: CTRBinary, split_dir: Path, symbols: list[Symbol]):
         o_file = split_dir / f'{sanitize(sym_name)}.o'
         if not o_file.exists():
             raise Exception(f"Skipped splitting object files, yet {o_file} does not exist (it should)!")
-        splat.append((cur_addr, o_file))
+        splat.append((start_addr, o_file))
     return splat
 
 
