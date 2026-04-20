@@ -243,7 +243,7 @@ def gather_bearings(argv: list[str]) -> CTRPipelineInfo:
         "--progress-reports",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Whether to report [PROGRESS] __._% during compiling, splitting, and linking"
+        help="Whether to report [PROGRESS] __._%% during compiling, splitting, and linking"
     )
     # Splitting
     parser.add_argument(
