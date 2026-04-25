@@ -21,8 +21,8 @@ def main(argv: list[str]) -> int:
         print(f"   * {binary}: {len(sym_dict[1])} symbols")
     print(f"Final output directory: {info.out_dir}")
 
-    ld = str((info.tool_dir / 'ld').resolve())
-    objcopy = str((info.tool_dir / 'objcopy').resolve())
+    ld = str((info.tool_dir / "binutils" / "arm-none-eabi-ld").resolve())
+    objcopy = str((info.tool_dir / "binutils" / "arm-none-eabi-objcopy").resolve())
 
     objdiff_units = []
 
