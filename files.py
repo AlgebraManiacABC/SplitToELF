@@ -5,6 +5,9 @@ import argparse
 import yaml
 from ctrtype import CTRBinary, CRO, ExHeader
 from util import Symbol, BinaryReader
+import platform
+from urllib.request import urlretrieve
+import zipfile
 
 try:
     HAS_TKINTER = True
@@ -74,6 +77,23 @@ def gather_sources(src_path: Path, cc_info: "CTRPipelineInfo", module: str = Non
     return objects
 
 
+def download_binutils(tool_dir: Path):
+    uname = platform.uname()
+    system = uname.system.lower()
+    arch = uname.machine.lower()
+    if system == "darwin":
+        system = "macos"
+        arch = "universal"
+    elif arch == "amd64":
+        arch = "x86_64"
+    binutils_url = f"https://github.com/akiramusic000/3ds-binutils/releases/download/2.42-0/{system}-{arch}.zip"
+
+    path, _ = urlretrieve(binutils_url, tool_dir / "binutils.zip")
+    with zipfile.ZipFile(path, "r") as zip:
+        zip.extractall(tool_dir / "binutils")
+    Path(path).unlink()
+
+
 class CTRPipelineInfo:
     def __init__(self, working_dir: Path, originals: list[Path],
                  exheader: ExHeader,
@@ -108,20 +128,20 @@ class CTRPipelineInfo:
         out_dir = working_dir / 'out'
         out_dir.mkdir(parents=True, exist_ok=True)
         tool_dir = working_dir / 'tools'
+        binutils_dir = tool_dir / "binutils"
         sym_dir = working_dir / 'symbols'
         cc_info_path = working_dir / 'cc.yaml'
         missing = []
         if not orig_dir.exists():
-            missing.append('directory "orig"')
+            orig_dir.mkdir()
         if not tool_dir.exists():
-            missing.append('directory "tools"')
-        else:
-            if not (tool_dir / 'ld').exists():
-                missing.append('tool "ld"')
-            if not (tool_dir / 'objcopy').exists():
-                missing.append('tool "objcopy"')
+            tool_dir.mkdir()
+
+        if not binutils_dir.exists():
+            download_binutils(tool_dir)
+
         if not sym_dir.exists():
-            missing.append('directory "symbols"')
+            sym_dir.mkdir()
         if not cc_info_path.exists():
             missing.append('compiler configuration "cc.yaml"')
         if missing:
